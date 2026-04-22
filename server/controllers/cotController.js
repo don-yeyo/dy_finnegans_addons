@@ -27,7 +27,7 @@ const regenerarCOT = async (req, res) => {
         console.log('[COT] Archivo generado, presentando a ARBA...');
 
         // Presentar a ARBA
-        const resultado = await arba.presentarRemito(contenidoArchivo);
+        const resultado = await arba.enviarCOT(contenidoArchivo.contenido, contenidoArchivo.nombreArchivo);
 
         if (resultado.success) {
             console.log(`[COT] ✓ COT generado exitosamente: ${resultado.nroCOT}`);
@@ -58,7 +58,7 @@ const regenerarCOT = async (req, res) => {
 const previewCOT = async (req, res) => {
     try {
         const datos = req.body;
-        const preview = arba.previewCOT(datos);
+        const preview = arba.generarArchivoCOT(datos); // previewCOT no existe, usar generarArchivoCOT
 
         res.json({
             success: true,

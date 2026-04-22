@@ -11,6 +11,10 @@ export const FinnegansService = {
         api.get(`/finnegans/envios/${envioId}/hojas-ruta`),
     getDetalleHojaRuta: (hojaRutaId) =>
         api.get(`/finnegans/hojas-ruta/${hojaRutaId}`),
+    buscarPorRango: (dias) =>
+        api.get('/finnegans/hojas-ruta/rango', { params: { dias } }),
+    getRemitos: (hojaRutaId) =>
+        api.get(`/finnegans/hojas-ruta/${hojaRutaId}/remitos`),
 };
 
 export const COTService = {

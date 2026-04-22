@@ -1,29 +1,47 @@
 const FinnegansService = require('../services/finnegansService');
-
 const finnegans = new FinnegansService();
 
 /**
+ * Buscar hojas de ruta en un rango de días.
+ * GET /api/finnegans/hojas-ruta/rango?dias=5
+ */
+const buscarHojasRutaRango = async (req, res) => {
+    try {
+        const dias = parseInt(req.query.dias) || 5;
+        const resultados = await finnegans.buscarHojasRutaRango(dias);
+        res.json(resultados);
+    } catch (error) {
+        console.error('[Finnegans] Error buscando hojas por rango:', error.message);
+        res.status(500).json({ error: 'Error buscando hojas de ruta.' });
+    }
+};
+
+/**
+ * Obtener remitos de una hoja de ruta.
+ * GET /api/finnegans/hojas-ruta/:id/remitos
+ */
+const getRemitosHojaRuta = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const remitos = await finnegans.getRemitosHojaRuta(id);
+        res.json(remitos);
+    } catch (error) {
+        console.error('[Finnegans] Error obteniendo remitos de HR:', error.message);
+        res.status(500).json({ error: 'Error obteniendo remitos vinculados.' });
+    }
+};
+
+/**
  * Buscar envíos en Finnegans.
- * GET /api/finnegans/envios?numero=XXX&fechaDesde=YYYY-MM-DD&fechaHasta=YYYY-MM-DD
  */
 const buscarEnvios = async (req, res) => {
     try {
         const { numero, fechaDesde, fechaHasta } = req.query;
-
-        if (!numero && !fechaDesde) {
-            return res.status(400).json({
-                error: 'Debe proporcionar al menos un número de envío o una fecha desde.'
-            });
-        }
-
         const resultados = await finnegans.buscarEnvios({ numero, fechaDesde, fechaHasta });
         res.json(resultados);
     } catch (error) {
         console.error('[Finnegans] Error buscando envíos:', error.message);
-        res.status(500).json({
-            error: 'Error consultando envíos en Finnegans.',
-            detalle: error.message
-        });
+        res.status(500).json({ error: 'Error consultando envíos.' });
     }
 };
 
@@ -76,5 +94,7 @@ const getDetalleHojaRuta = async (req, res) => {
 module.exports = {
     buscarEnvios,
     getHojasRuta,
-    getDetalleHojaRuta
+    getDetalleHojaRuta,
+    buscarHojasRutaRango,
+    getRemitosHojaRuta
 };

@@ -318,4 +318,4 @@ class ArbaService {
     }
 }
 
-module.exports = new ArbaService();
+module.exports = ArbaService;

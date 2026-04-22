@@ -1,6 +1,18 @@
 const express = require('express');
 const router = express.Router();
-const { buscarEnvios, getHojasRuta, getDetalleHojaRuta } = require('../controllers/finnegansController');
+const { 
+    buscarEnvios, 
+    getHojasRuta, 
+    getDetalleHojaRuta,
+    buscarHojasRutaRango,
+    getRemitosHojaRuta
+} = require('../controllers/finnegansController');
+
+// Bucar hojas por rango de días
+router.get('/hojas-ruta/rango', buscarHojasRutaRango);
+
+// Obtener remitos asociados a una hoja
+router.get('/hojas-ruta/:id/remitos', getRemitosHojaRuta);
 
 // Buscar envíos por número o rango de fechas
 router.get('/envios', buscarEnvios);
