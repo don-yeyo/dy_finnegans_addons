@@ -6,9 +6,12 @@ const finnegans = new FinnegansService();
  * GET /api/finnegans/hojas-ruta/rango?dias=5
  */
 const buscarHojasRutaRango = async (req, res) => {
+    console.log('[DEBUG] Recibida petición de rango de hojas de ruta');
     try {
         const dias = parseInt(req.query.dias) || 5;
+        console.log(`[DEBUG] Buscando hojas para los últimos ${dias} días...`);
         const resultados = await finnegans.buscarHojasRutaRango(dias);
+        console.log('[DEBUG] Búsqueda finalizada, enviando respuesta.');
         res.json(resultados);
     } catch (error) {
         console.error('[Finnegans] Error buscando hojas por rango:', error.message);

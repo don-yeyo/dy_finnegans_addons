@@ -44,12 +44,24 @@ const RegeneracionCOT = () => {
     });
     const [cotResult, setCotResult] = useState(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [alertModal, setAlertModal] = useState({ show: false, title: '', message: '', type: 'warning' });
 
     // --- Effects ---
     useEffect(() => {
         cargarHojasRuta();
         localStorage.setItem('dy_cot_rango_dias', rangoDias);
     }, [rangoDias]);
+
+    // --- Computed ---
+    const hojasFiltradas = hojasRuta.filter(h => {
+        // Filtro por estado
+        if (h.ESTADOHR !== 'Pendiente') return false;
+        
+        // Filtro por texto de búsqueda
+        if (!searchTerm) return true;
+        return String(h.DOCNROINTERNO).toLowerCase().includes(searchTerm.toLowerCase());
+    });
 
     // --- Handlers ---
 
@@ -58,7 +70,17 @@ const RegeneracionCOT = () => {
         setError('');
         try {
             const res = await FinnegansService.buscarPorRango(rangoDias);
-            setHojasRuta(Array.isArray(res.data) ? res.data : []);
+            let data = Array.isArray(res.data) ? res.data : [];
+            
+            // Ordenar por fecha descendente (más recientes primero)
+            // Formato esperado: DD-MM-YYYY
+            data.sort((a, b) => {
+                const dateA = a.FECHA ? a.FECHA.split('-').reverse().join('-') : '';
+                const dateB = b.FECHA ? b.FECHA.split('-').reverse().join('-') : '';
+                return dateB.localeCompare(dateA);
+            });
+
+            setHojasRuta(data);
         } catch (err) {
             setError('Error cargando Hojas de Ruta de Finnegans.');
             console.error(err);
@@ -103,7 +125,12 @@ const RegeneracionCOT = () => {
     const irAConfigurar = () => {
         const seleccion = Object.values(selectedRemitos).flat();
         if (seleccion.length === 0) {
-            setError('Debe seleccionar al menos un remito.');
+            setAlertModal({
+                show: true,
+                title: 'Selección Necesaria',
+                message: 'Por favor, selecciona al menos un remito de la lista para poder generar el COT.',
+                type: 'warning'
+            });
             return;
         }
 
@@ -160,33 +187,46 @@ const RegeneracionCOT = () => {
     // --- Render Helpers ---
 
     const renderRangoSelector = () => (
-        <div style={{ 
-            display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px',
-            background: 'var(--surface-hover)', padding: '12px 20px', borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--border)'
-        }}>
-            <Calendar size={18} style={{ color: 'var(--dy-red)' }} />
-            <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Ver Hojas de Ruta de los últimos:</span>
-            <select 
-                value={rangoDias} 
-                onChange={(e) => setRangoDias(parseInt(e.target.value))}
-                className="dy-select"
-            >
-                {[1, 2, 3, 5, 10, 15, 30].map(d => (
-                    <option key={d} value={d}>{d} días</option>
-                ))}
-            </select>
-            <div style={{ marginLeft: 'auto' }}>
-                <Button variant="ghost" size="sm" onClick={cargarHojasRuta} loading={loading}>
-                    <RefreshCcw size={14} /> Refrescar
-                </Button>
+        <div style={{ marginBottom: '24px' }}>
+            <div style={{ 
+                display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px',
+                background: 'var(--surface-hover)', padding: '12px 20px', borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--border)'
+            }}>
+                <Calendar size={18} style={{ color: 'var(--dy-red)' }} />
+                <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Ver Hojas de Ruta de los últimos:</span>
+                <select 
+                    value={rangoDias} 
+                    onChange={(e) => setRangoDias(parseInt(e.target.value))}
+                    className="dy-select"
+                >
+                    {[1, 2, 3, 5, 10, 15, 30].map(d => (
+                        <option key={d} value={d}>{d} días</option>
+                    ))}
+                </select>
+                <div style={{ marginLeft: 'auto' }}>
+                    <Button variant="ghost" size="sm" onClick={cargarHojasRuta} loading={loading}>
+                        <RefreshCcw size={14} /> Refrescar
+                    </Button>
+                </div>
+            </div>
+
+            <div style={{ position: 'relative' }}>
+                <Search size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input 
+                    type="text"
+                    placeholder="Filtrar por número de Hoja de Ruta..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{ paddingLeft: '48px', width: '100%' }}
+                />
             </div>
         </div>
     );
 
     const renderAccordion = () => (
         <div className="dy-accordion-list">
-            {hojasRuta.map((hoja, i) => {
+            {hojasFiltradas.map((hoja, i) => {
                 const id = hoja.TRANSACCIONID || hoja.DOCNROINTERNO;
                 const isExpanded = expandedHoja === id;
                 const seleccionados = (selectedRemitos[id] || []).length;
@@ -406,6 +446,17 @@ const RegeneracionCOT = () => {
                     <Button onClick={resetFlow} variant="secondary"><RefreshCcw size={18} /> Volver a Empezar</Button>
                 </Card>
             )}
+
+            {/* Modal de Alertas/Validaciones */}
+            <Modal
+                isOpen={alertModal.show}
+                onClose={() => setAlertModal(prev => ({ ...prev, show: false }))}
+                title={alertModal.title}
+                message={alertModal.message}
+                type={alertModal.type}
+                confirmLabel="Entendido"
+                showCancel={false}
+            />
 
             <Modal
                 isOpen={showConfirmModal}

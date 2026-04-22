@@ -1,4 +1,6 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 /**
  * FinnegansService — Port a Node.js del servicio Python existente.
@@ -21,6 +23,23 @@ class FinnegansService {
     }
 
     /**
+     * Helper para imprimir el equivalente a cURL de la petición (para debug).
+     */
+    _logCurl(url, params = {}, method = 'GET') {
+        const query = new URLSearchParams(params).toString();
+        const fullUrl = query ? `${url}?${query}` : url;
+        const logContent = `\n[${new Date().toISOString()}] --- FINNEGANS cURL DEBUG ---\ncurl -X ${method} "${fullUrl}"\n----------------------------\n`;
+        
+        console.log(logContent);
+        
+        try {
+            fs.appendFileSync(path.join(__dirname, '../debug.log'), logContent);
+        } catch (e) {
+            console.error('Error escribiendo en debug.log:', e.message);
+        }
+    }
+
+    /**
      * Obtiene un access token OAuth2 (client_credentials).
      * Cachea el token para reutilizarlo hasta que expire.
      */
@@ -36,12 +55,14 @@ class FinnegansService {
             client_secret: this.clientSecret
         });
 
+        console.log(`[Finnegans] Solicitando nuevo Access Token a: ${this.tokenUrl}`);
         const response = await axios.get(`${this.tokenUrl}?${params.toString()}`, {
             timeout: this.timeout
         });
 
         // Finnegans devuelve el token como texto plano
         this._accessToken = response.data.toString().trim();
+        console.log('[Finnegans] Token obtenido exitosamente.');
         // Token válido por 1 hora (default Finnegans)
         this._tokenExpiry = Date.now() + 3600000;
         return this._accessToken;
@@ -63,6 +84,8 @@ class FinnegansService {
         };
 
         console.log(`[Finnegans] Ejecutando reporte: ${reportName}`);
+        this._logCurl(url, queryParams);
+
         const response = await axios.get(url, {
             params: queryParams,
             timeout: this.timeout
@@ -105,6 +128,7 @@ class FinnegansService {
 
         const fechaDesde = pastDate.toISOString().split('T')[0];
         const fechaHasta = today.toISOString().split('T')[0];
+        console.log(`[Finnegans] Buscando en rango: ${fechaDesde} hasta ${fechaHasta}`);
 
         return this.buscarEnvios({ fechaDesde, fechaHasta });
     }
@@ -115,31 +139,53 @@ class FinnegansService {
      * @returns {Array} Lista de remitos con detalle (Cliente, Pedido, etc.)
      */
     async getRemitosHojaRuta(hojaRutaId) {
-        // Por ahora usamos el reporte de facturas filtrando por una dimensión probable
-        // En una implementación real, esto consultaría un reporte de 'Analisis de Despachos por HR'
+        // En Don Yeyo, los remitos se vinculan a la HR mediante la descripción
+        // en el reporte analisisDespachos (que contiene el detalle de ítems)
+        const report = 'analisisDespachos';
         const params = {
-            PARAMWEBREPORT_dimension: 'Hoja de Ruta', // Valor tentativo, ajustar según feedback
-            PARAMWEBREPORT_valor: hojaRutaId
+            PARAMWEBREPORT_Empresa: this.empresaCod,
+            // Ampliamos un poco el rango para asegurar que aparezcan
+            PARAMWEBREPORT_FechaDesde: '2024-01-01',
+            PARAMWEBREPORT_FechaHasta: '2026-12-31'
         };
-        
-        // Si no tenemos el reporte específico, intentamos obtener el detalle de la transacción
-        // o retornar un mock basado en el ID para permitir el desarrollo del frontend
+
         try {
-            const data = await this.executeReport('analisisDespachoVenta', params);
-            return Array.isArray(data) ? data : [];
-        } catch (e) {
-            console.warn(`[Finnegans] No se pudieron obtener remitos para HR ${hojaRutaId}, retornando ítems de prueba.`);
-            return [
-                { 
-                    cliente: 'CHAVES RICARDO ARIEL', 
-                    pedidoTipo: 'PEDVTA', 
-                    pedidoNro: '82384', 
-                    comprobante: 'P-0000-00142012', 
-                    fecha: '2026-03-31', 
-                    despacho: 'R-0005-00464692',
-                    id: `${hojaRutaId}_1`
+            console.log(`[Finnegans] Buscando remitos para HR ${hojaRutaId} en ${report}...`);
+            const data = await this.executeReport(report, params);
+            
+            if (!Array.isArray(data)) return [];
+
+            // Limpiamos el ID para la búsqueda (ej: de "HOJARUTA - 20887" a "20887")
+            const numeroSolo = String(hojaRutaId).replace(/[^0-9]/g, '');
+
+            // Filtramos los registros que mencionen esta Hoja de Ruta en su DESCRIPCION
+            const remitosUnicos = {};
+            
+            data.forEach(d => {
+                const desc = String(d.DESCRIPCION || '').toUpperCase();
+                if (desc.includes(numeroSolo) && desc.includes('HOJARUTA')) {
+                    const comp = d.COMPROBANTE || d.DESPACHO;
+                    if (comp && !remitosUnicos[comp]) {
+                        remitosUnicos[comp] = {
+                            id: d.TRANSACCIONID,
+                            cliente: d.CLIENTE || d.PROVEEDOR,
+                            pedidoTipo: d.TRANSACCONSUBTIPONOMBRE || 'REMVTA',
+                            pedidoNro: d.DOCNROINT || d.IDENTIFICACIONEXTERNA,
+                            comprobante: comp,
+                            fecha: d.FECHA,
+                            despacho: comp
+                        };
+                    }
                 }
-            ];
+            });
+
+            const results = Object.values(remitosUnicos);
+            console.log(`[Finnegans] Se encontraron ${results.length} remitos vinculados únicos.`);
+            return results;
+
+        } catch (e) {
+            console.error(`[Finnegans] Error buscando remitos para HR ${hojaRutaId}:`, e.message);
+            return [];
         }
     }
 
@@ -166,8 +212,11 @@ class FinnegansService {
         const token = await this._getAccessToken();
         const url = `${this.apiBase}/transaccion/${hojaRutaId}`;
 
+        const queryParams = { ACCESS_TOKEN: token };
+        this._logCurl(url, queryParams);
+
         const response = await axios.get(url, {
-            params: { ACCESS_TOKEN: token },
+            params: queryParams,
             timeout: this.timeout
         });
 
@@ -185,8 +234,11 @@ class FinnegansService {
         const token = await this._getAccessToken();
         const url = `${this.apiBase}/${endpoint}`;
 
+        const queryParams = { ACCESS_TOKEN: token, ...params };
+        this._logCurl(url, queryParams);
+
         const response = await axios.get(url, {
-            params: { ACCESS_TOKEN: token, ...params },
+            params: queryParams,
             timeout: this.timeout
         });
 

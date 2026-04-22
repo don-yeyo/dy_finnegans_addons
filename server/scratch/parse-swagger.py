@@ -5,10 +5,16 @@ filepath = r'C:\Users\gabrielt\.gemini\antigravity\brain\7fe650f9-9126-4f6a-a12d
 
 with open(filepath, 'r', encoding='utf-8') as f:
     lines = f.readlines()
-    json_str = "".join(lines[4:])
+    # Buscamos donde empieza el JSON {
+    start_line = 0
+    for i, line in enumerate(lines):
+        if line.strip().startswith('{'):
+            start_line = i
+            break
+    json_str = "".join(lines[start_line:])
     data = json.loads(json_str)
 
-print("--- Paths containing 'ENVI' ---")
+print("--- ALL DASHBOARD REPORTS ---")
 for p in data['paths'].keys():
-    if 'ENVI' in p.upper():
-        print(p)
+    if '/reports/' in p:
+        print(p.replace('/reports/', ''))
