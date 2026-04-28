@@ -2,10 +2,12 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { loginRequest } from "./msal";
 
+import { InteractionStatus } from "@azure/msal-browser";
+
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-    const { instance, accounts } = useMsal();
+    const { instance, accounts, inProgress } = useMsal();
     const isMsAuthenticated = useIsAuthenticated();
     
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -46,24 +48,31 @@ export const AuthProvider = ({ children }) => {
     }, [isMsAuthenticated, accounts]);
 
     const login = () => {
-        instance.loginRedirect(loginRequest).catch(e => {
-            console.error(e);
-        });
+        if (inProgress === InteractionStatus.None) {
+            instance.loginRedirect(loginRequest).catch(e => {
+                console.error(e);
+            });
+        } else {
+            console.warn("[MSAL] Bloqueado login por interacción en curso:", inProgress);
+        }
     };
 
     const logout = () => {
-        instance.logoutRedirect({
-            postLogoutRedirectUri: "/",
-        }).catch(e => {
-            console.error(e);
-        });
+        if (inProgress === InteractionStatus.None) {
+            instance.logoutRedirect({
+                postLogoutRedirectUri: "/",
+            }).catch(e => {
+                console.error(e);
+            });
+        }
     };
 
     return (
         <AuthContext.Provider value={{
             isAuthenticated,
             user,
-            loading,
+            loading: loading || inProgress !== InteractionStatus.None,
+            inProgress,
             login,
             logout
         }}>

@@ -69,6 +69,7 @@ const AuthGate = ({ children }) => {
                     <Button
                         className="btn-microsoft"
                         onClick={login}
+                        disabled={loading}
                     >
                         <img
                             src={microsoftLogo}
