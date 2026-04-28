@@ -46,8 +46,11 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Error interno del servidor.' });
 });
 
-app.listen(PORT, () => {
-    console.log(`[Finnegans Addons] v1.0.4 - Server running on port ${PORT}`);
-});
+// Solo iniciar el servidor si no estamos en Netlify
+if (process.env.NODE_ENV !== 'production' || !process.env.NETLIFY) {
+    app.listen(PORT, () => {
+        console.log(`[Finnegans Addons] v1.0.4 - Server running on port ${PORT}`);
+    });
+}
 
 module.exports = app;
