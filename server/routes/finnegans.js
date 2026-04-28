@@ -5,7 +5,8 @@ const {
     getHojasRuta, 
     getDetalleHojaRuta,
     buscarHojasRutaRango,
-    getRemitosHojaRuta
+    getRemitosHojaRuta,
+    getDetalleRemitoCOT
 } = require('../controllers/finnegansController');
 
 // Bucar hojas por rango de días
@@ -13,6 +14,9 @@ router.get('/hojas-ruta/rango', buscarHojasRutaRango);
 
 // Obtener remitos asociados a una hoja
 router.get('/hojas-ruta/:id/remitos', getRemitosHojaRuta);
+
+// Detalle extendido para COT
+router.get('/remitos/:id/detalle-cot', getDetalleRemitoCOT);
 
 // Buscar envíos por número o rango de fechas
 router.get('/envios', buscarEnvios);

@@ -47,7 +47,7 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`[Finnegans Addons] Server running on port ${PORT}`);
+    console.log(`[Finnegans Addons] v1.0.4 - Server running on port ${PORT}`);
 });
 
 module.exports = app;

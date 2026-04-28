@@ -19,6 +19,8 @@
 
 const axios = require('axios');
 const FormData = require('form-data');
+const fs = require('fs');
+const path = require('path');
 
 class ArbaService {
     constructor() {
@@ -26,6 +28,8 @@ class ArbaService {
         this.cotUser = process.env.ARBA_COT_USER;
         this.cotPassword = process.env.ARBA_COT_PASSWORD;
         this.cuitEmpresa = process.env.ARBA_CUIT_EMPRESA;
+        this.saveLocal = process.env.ARBA_SAVE_LOCAL === 'true';
+        this.localPath = process.env.ARBA_LOCAL_PATH || './txts';
     }
 
     // ============================================================
@@ -245,13 +249,35 @@ class ArbaService {
         const now = new Date();
         const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
         const nombreArchivo = `COT_${this.cuitEmpresa}_${ts}.txt`;
+        const contenidoFinal = contenido + '\r\n'; // Asegurar CRLF final
+
+        if (this.saveLocal) {
+            this._guardarArchivoLocal(contenidoFinal, nombreArchivo);
+        }
 
         return {
-            contenido,
+            contenido: contenidoFinal,
             nombreArchivo,
             lineas: lineas.length,
-            tamaño: Buffer.byteLength(contenido, 'latin1')
+            tamaño: Buffer.byteLength(contenidoFinal, 'latin1')
         };
+    }
+
+    /**
+     * Guarda el archivo TXT localmente para auditoría o debugging.
+     */
+    _guardarArchivoLocal(contenido, nombreArchivo) {
+        try {
+            const dir = path.resolve(this.localPath);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+            const filePath = path.join(dir, nombreArchivo);
+            fs.writeFileSync(filePath, contenido, 'latin1');
+            console.log(`[ARBA] Archivo guardado localmente: ${filePath}`);
+        } catch (error) {
+            console.error(`[ARBA] Error guardando archivo local: ${error.message}`);
+        }
     }
 
     /**
@@ -265,15 +291,22 @@ class ArbaService {
             throw new Error('Faltan credenciales de ARBA (ARBA_COT_URL, ARBA_COT_USER, ARBA_COT_PASSWORD)');
         }
 
+        // ARBA espera las credenciales en la URL (Query String)
+        const urlConAuth = `${this.cotUrl}?user=${this.cotUser}&password=${this.cotPassword}`;
+
         const form = new FormData();
-        form.append('user', this.cotUser);
-        form.append('password', this.cotPassword);
         form.append('archivo', Buffer.from(contenido, 'latin1'), {
             filename: nombreArchivo,
             contentType: 'text/plain'
         });
 
-        const response = await axios.post(this.cotUrl, form, {
+        // Debug cURL corregido
+        console.log('\n[ARBA] --- cURL DEBUG (Corregido) ---');
+        console.log(`curl -X POST "${urlConAuth}" \\`);
+        console.log(`  -F "archivo=@${nombreArchivo};type=text/plain"`);
+        console.log('-------------------------------------\n');
+
+        const response = await axios.post(urlConAuth, form, {
             headers: form.getHeaders(),
             timeout: parseInt(process.env.ARBA_TIMEOUT || '60') * 1000,
         });

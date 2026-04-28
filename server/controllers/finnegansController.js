@@ -26,7 +26,8 @@ const buscarHojasRutaRango = async (req, res) => {
 const getRemitosHojaRuta = async (req, res) => {
     try {
         const { id } = req.params;
-        const remitos = await finnegans.getRemitosHojaRuta(id);
+        const { fecha } = req.query;
+        const remitos = await finnegans.getRemitosHojaRuta(id, fecha);
         res.json(remitos);
     } catch (error) {
         console.error('[Finnegans] Error obteniendo remitos de HR:', error.message);
@@ -94,10 +95,26 @@ const getDetalleHojaRuta = async (req, res) => {
     }
 };
 
+/**
+ * Obtener detalle de remito para COT.
+ * GET /api/finnegans/remitos/:id/detalle-cot
+ */
+const getDetalleRemitoCOT = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const detalle = await finnegans.getDetalleRemitoCOT(id);
+        res.json(detalle);
+    } catch (error) {
+        console.error('[Finnegans] Error obteniendo detalle de remito para COT:', error.message);
+        res.status(500).json({ error: 'Error obteniendo detalle de remito.' });
+    }
+};
+
 module.exports = {
     buscarEnvios,
     getHojasRuta,
     getDetalleHojaRuta,
     buscarHojasRutaRango,
-    getRemitosHojaRuta
+    getRemitosHojaRuta,
+    getDetalleRemitoCOT
 };

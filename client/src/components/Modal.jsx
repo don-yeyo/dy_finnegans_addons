@@ -39,16 +39,14 @@ const Modal = ({ isOpen, onClose, title, message, children, onConfirm, type = 'i
                 <div className="modal-body">
                     {children ? children : (typeof message === 'string' ? <p>{message}</p> : message)}
                 </div>
-                {!children && (
-                    <div className="modal-footer">
-                        {showCancel && (
-                            <button className="btn-secondary" onClick={onClose}>{cancelLabel}</button>
-                        )}
-                        <button className={`btn-primary ${type === 'error' ? 'btn-error' : type === 'warning' ? 'btn-warning' : ''}`} onClick={handleConfirm}>
-                            {confirmLabel}
-                        </button>
-                    </div>
-                )}
+                <div className="modal-footer">
+                    {showCancel && (
+                        <button className="btn-secondary" onClick={onClose}>{cancelLabel}</button>
+                    )}
+                    <button className={`btn-primary ${type === 'error' ? 'btn-error' : type === 'warning' ? 'btn-warning' : ''}`} onClick={handleConfirm}>
+                        {confirmLabel}
+                    </button>
+                </div>
             </div>
         </div>,
         document.body

@@ -13,9 +13,10 @@ Sistema web interno de herramientas auxiliares para Don Yeyo S.A. que integra co
 ### Regeneración de COT
 Cuando un camión deja de estar disponible (avería mecánica, falla en cámara de frío, etc.) y es necesario cargar los productos en otro vehículo, esta herramienta permite:
 
-1. **Buscar el envío** en Finnegans por número o rango de fechas
-2. **Seleccionar la hoja de ruta** afectada y ver sus datos actuales
-3. **Regenerar el COT** ingresando los nuevos datos de transporte (patente, transportista, chofer) y enviando la solicitud directamente a ARBA
+1. **Buscar el envío** en Finnegans por número o rango de fechas.
+2. **Seleccionar la hoja de ruta** afectada y ver sus datos actuales (incluyendo transportista, chofer y detalle de viaje).
+3. **Filtrado avanzado**: Permite buscar hojas de ruta por número, transportista, chofer, detalle de viaje o patente directamente desde la lista.
+4. **Regenerar el COT** ingresando los nuevos datos de transporte y enviando la solicitud directamente a ARBA.
 
 ## Setup
 
@@ -58,6 +59,8 @@ npm install --prefix client
 | `ARBA_COT_PASSWORD` | Contraseña COT de ARBA | `mipass` |
 | `ARBA_COT_URL` | URL del servicio COT | `http://cot.test.arba.gov.ar/...` |
 | `ARBA_CUIT_EMPRESA` | CUIT de la empresa (11 dígitos) | `30123456789` |
+| `ARBA_SAVE_LOCAL` | ¿Guardar copia local del TXT? | `false` |
+| `ARBA_LOCAL_PATH` | Path para archivos locales | `./txts` |
 
 #### Client (`client/.env`)
 

@@ -138,53 +138,67 @@ class FinnegansService {
      * @param {string|number} hojaRutaId - ID o Comprobante de la HR
      * @returns {Array} Lista de remitos con detalle (Cliente, Pedido, etc.)
      */
-    async getRemitosHojaRuta(hojaRutaId) {
-        // En Don Yeyo, los remitos se vinculan a la HR mediante la descripción
-        // en el reporte analisisDespachos (que contiene el detalle de ítems)
-        const report = 'analisisDespachos';
+    async getRemitosHojaRuta(hojaRutaId, fechaHoja) {
+        // Nuevo reporte solicitado por el usuario
+        const report = 'USR_Despachos_x_HDRDY';
+        
+        let fechaHasta = '';
+        let fechaDesde = '';
+
+        if (fechaHoja && typeof fechaHoja === 'string') {
+            try {
+                // La fecha viene habitualmente como DD-MM-YYYY
+                let parts = fechaHoja.includes('-') ? fechaHoja.split('-') : fechaHoja.split('/');
+                if (parts.length === 3) {
+                    // Normalizar a YYYY-MM-DD para el objeto Date
+                    let normalized = parts[2].length === 4 ? `${parts[2]}-${parts[1]}-${parts[0]}` : fechaHoja;
+                    const dateObj = new Date(normalized);
+                    if (!isNaN(dateObj.getTime())) {
+                        fechaHasta = dateObj.toISOString().split('T')[0];
+                        // 10 días para atrás para fechaDesde
+                        const past = new Date(dateObj);
+                        past.setDate(dateObj.getDate() - 10);
+                        fechaDesde = past.toISOString().split('T')[0];
+                    }
+                }
+            } catch (err) {
+                console.warn('[Finnegans] Error calculando rango de fechas:', err.message);
+            }
+        }
+
+        // Fallback si el parseo falla
+        if (!fechaHasta) {
+            fechaHasta = new Date().toISOString().split('T')[0];
+            const past = new Date();
+            past.setDate(past.getDate() - 10);
+            fechaDesde = past.toISOString().split('T')[0];
+        }
+
         const params = {
-            PARAMWEBREPORT_Empresa: this.empresaCod,
-            // Ampliamos un poco el rango para asegurar que aparezcan
-            PARAMWEBREPORT_FechaDesde: '2024-01-01',
-            PARAMWEBREPORT_FechaHasta: '2026-12-31'
+            ID_Hoja_de_ruta: hojaRutaId,
+            fechaDesde: fechaDesde,
+            fechaHasta: fechaHasta
         };
 
         try {
-            console.log(`[Finnegans] Buscando remitos para HR ${hojaRutaId} en ${report}...`);
+            console.log(`[Finnegans] Consultando remitos con ${report} para ID ${hojaRutaId} (${fechaDesde} a ${fechaHasta})...`);
             const data = await this.executeReport(report, params);
             
             if (!Array.isArray(data)) return [];
 
-            // Limpiamos el ID para la búsqueda (ej: de "HOJARUTA - 20887" a "20887")
-            const numeroSolo = String(hojaRutaId).replace(/[^0-9]/g, '');
-
-            // Filtramos los registros que mencionen esta Hoja de Ruta en su DESCRIPCION
-            const remitosUnicos = {};
-            
-            data.forEach(d => {
-                const desc = String(d.DESCRIPCION || '').toUpperCase();
-                if (desc.includes(numeroSolo) && desc.includes('HOJARUTA')) {
-                    const comp = d.COMPROBANTE || d.DESPACHO;
-                    if (comp && !remitosUnicos[comp]) {
-                        remitosUnicos[comp] = {
-                            id: d.TRANSACCIONID,
-                            cliente: d.CLIENTE || d.PROVEEDOR,
-                            pedidoTipo: d.TRANSACCONSUBTIPONOMBRE || 'REMVTA',
-                            pedidoNro: d.DOCNROINT || d.IDENTIFICACIONEXTERNA,
-                            comprobante: comp,
-                            fecha: d.FECHA,
-                            despacho: comp
-                        };
-                    }
-                }
-            });
-
-            const results = Object.values(remitosUnicos);
-            console.log(`[Finnegans] Se encontraron ${results.length} remitos vinculados únicos.`);
-            return results;
+            return data.map(d => ({
+                id: d.TRANSACCIONID || d.IDENTIFICACIONEXTERNA || d.NROINTERNO,
+                cliente: d.ORGANIZACION || d.CLIENTE || 'Cliente Don Yeyo',
+                pedidoTipo: d.TRANSACCIONSUBTIPOCODIGO || 'REMVTA',
+                pedidoNro: d.IDENTIFICACIONEXTERNA || d.COMPROBANTE,
+                comprobante: d.IDENTIFICACIONEXTERNA || d.COMPROBANTE,
+                fecha: d.FECHA,
+                despacho: d.IDENTIFICACIONEXTERNA || d.COMPROBANTE,
+                cae: d.OBTUVOCAE === 'SI'
+            }));
 
         } catch (e) {
-            console.error(`[Finnegans] Error buscando remitos para HR ${hojaRutaId}:`, e.message);
+            console.error(`[Finnegans] Error en getRemitosHojaRuta:`, e.message);
             return [];
         }
     }
@@ -243,6 +257,18 @@ class FinnegansService {
         });
 
         return response.data;
+    }
+    /**
+     * Obtiene el detalle de un remito para la generación masiva de COT.
+     * @param {string|number} transaccionId - ID del remito
+     * @returns {Array} Detalle del remito (productos, direcciones, etc.)
+     */
+    async getDetalleRemitoCOT(transaccionId) {
+        const report = 'USR_ViewApiCOTMasivo';
+        const params = {
+            PARAMWEBREPORT_TransaccionID: transaccionId
+        };
+        return this.executeReport(report, params);
     }
 }
 

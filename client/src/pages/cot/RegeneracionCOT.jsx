@@ -6,12 +6,13 @@ import { FinnegansService, COTService } from '../../services/api';
 import {
     Search, ArrowLeft, ArrowRight, RefreshCcw, Eye, Send,
     Truck, FileText, CheckCircle, AlertCircle, Package, MapPin,
-    ChevronDown, ChevronUp, Filter, Calendar
+    ChevronDown, ChevronUp, Filter, Calendar, User, Download
 } from 'lucide-react';
 
 const STEPS = [
-    { label: 'Seleccionar Remitos', icon: Search },
-    { label: 'Nuevos Datos', icon: RefreshCcw }
+    { label: 'Hojas de Ruta', icon: Truck },
+    { label: 'Configuración', icon: FileText },
+    { label: 'Regeneración COT', icon: RefreshCcw }
 ];
 
 const DEFAULT_DAYS = parseInt(import.meta.env.VITE_DEFAULT_COT_DAYS || '5');
@@ -30,7 +31,7 @@ const RegeneracionCOT = () => {
     const [hojasRuta, setHojasRuta] = useState([]);
     const [expandedHoja, setExpandedHoja] = useState(null);
     const [remitosPorHoja, setRemitosPorHoja] = useState({});
-    const [selectedRemitos, setSelectedRemitos] = useState({}); // { [hojaId]: [remitoId1, remitoId2] }
+    const [selectedHoja, setSelectedHoja] = useState(null);
 
     // Step 2: Form
     const [cotForm, setCotForm] = useState({
@@ -40,12 +41,17 @@ const RegeneracionCOT = () => {
         patenteAcoplado: '',
         fechaPartida: new Date().toISOString().split('T')[0],
         horaPartida: '',
-        itemsSeleccionados: [] // Remitos a procesar
     });
+
+    const [processingBatch, setProcessingBatch] = useState(false);
+    const [batchResults, setBatchResults] = useState([]); // [{ remitoId, success, nroCOT, error }]
+    const [currentBatchIndex, setCurrentBatchIndex] = useState(0);
     const [cotResult, setCotResult] = useState(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [alertModal, setAlertModal] = useState({ show: false, title: '', message: '', type: 'warning' });
+    const [viewingDetalle, setViewingDetalle] = useState(null);
+    const [retryingIndex, setRetryingIndex] = useState(null);
 
     // --- Effects ---
     useEffect(() => {
@@ -55,12 +61,17 @@ const RegeneracionCOT = () => {
 
     // --- Computed ---
     const hojasFiltradas = hojasRuta.filter(h => {
-        // Filtro por estado
-        if (h.ESTADOHR !== 'Pendiente') return false;
-        
         // Filtro por texto de búsqueda
         if (!searchTerm) return true;
-        return String(h.DOCNROINTERNO).toLowerCase().includes(searchTerm.toLowerCase());
+        
+        const term = searchTerm.toLowerCase();
+        return (
+            String(h.DOCNROINTERNO || '').toLowerCase().includes(term) ||
+            String(h.TRANSPORTISTA || '').toLowerCase().includes(term) ||
+            String(h.CHOFER || '').toLowerCase().includes(term) ||
+            String(h.VIAJE || '').toLowerCase().includes(term) ||
+            String(h.PATENTE || '').toLowerCase().includes(term)
+        );
     });
 
     // --- Handlers ---
@@ -71,7 +82,7 @@ const RegeneracionCOT = () => {
         try {
             const res = await FinnegansService.buscarPorRango(rangoDias);
             let data = Array.isArray(res.data) ? res.data : [];
-            
+
             // Ordenar por fecha descendente (más recientes primero)
             // Formato esperado: DD-MM-YYYY
             data.sort((a, b) => {
@@ -100,87 +111,217 @@ const RegeneracionCOT = () => {
         if (!remitosPorHoja[id]) {
             setLoading(true);
             try {
-                const res = await FinnegansService.getRemitos(id);
+                // Pasamos DOCNROINTERNO porque es el que figura en la DESCRIPCION de los remitos
+                const res = await FinnegansService.getRemitos(hoja.TRANSACCIONID || hoja.DOCNROINTERNO, hoja.FECHA);
                 setRemitosPorHoja(prev => ({ ...prev, [id]: res.data }));
             } catch (err) {
                 console.error('Error cargando remitos:', err);
+                const isTimeout = err.code === 'ECONNABORTED' || err.message?.includes('timeout');
+                setAlertModal({
+                    show: true,
+                    title: isTimeout ? 'Tiempo Agotado' : 'Error de Conexión',
+                    message: isTimeout
+                        ? 'La respuesta de Finnegans tardó demasiado. Por favor, intenta expandir la hoja de ruta nuevamente.'
+                        : 'No pudimos obtener los remitos en este momento. Verifica tu conexión o el estado de Finnegans.',
+                    type: 'error'
+                });
             } finally {
                 setLoading(false);
             }
         }
     };
 
-    const toggleRemito = (hojaId, remito) => {
-        setSelectedRemitos(prev => {
-            const ids = prev[hojaId] || [];
-            const isSelected = ids.some(r => r.id === remito.id);
-            if (isSelected) {
-                return { ...prev, [hojaId]: ids.filter(r => r.id !== remito.id) };
-            } else {
-                return { ...prev, [hojaId]: [...ids, remito] };
-            }
-        });
-    };
-
-    const irAConfigurar = () => {
-        const seleccion = Object.values(selectedRemitos).flat();
-        if (seleccion.length === 0) {
-            setAlertModal({
-                show: true,
-                title: 'Selección Necesaria',
-                message: 'Por favor, selecciona al menos un remito de la lista para poder generar el COT.',
-                type: 'warning'
-            });
-            return;
-        }
-
-        // Pre-cargar datos del transportista de la primera hoja seleccionada
-        const primeraHojaId = Object.keys(selectedRemitos).find(k => selectedRemitos[k].length > 0);
-        const hoja = hojasRuta.find(h => (h.TRANSACCIONID || h.DOCNROINTERNO) == primeraHojaId);
-
-        setCotForm(prev => ({
-            ...prev,
-            cuitTransportista: hoja?.TRANSPORTISTAID || '',
-            razonSocialTransportista: hoja?.TRANSPORTISTA || '',
-            itemsSeleccionados: seleccion
-        }));
-        setError('');
-        setCurrentStep(1);
-    };
-
-    const validarPatente = (p) => {
-        if (!p) return true;
-        // Formato LLL-### (Usuario pidió LLL-###)
-        return /^[A-Z]{3}-\d{3}$/.test(p);
-    };
-
-    const enviarARBA = async () => {
-        if (!validarPatente(cotForm.patente)) {
-            setError('Formato de patente inválido (Debe ser LLL-###).');
-            return;
-        }
-        setShowConfirmModal(false);
+    const irAConfigurar = async (hoja) => {
         setLoading(true);
         setError('');
+        
         try {
-            // En una implementación real, esto enviaría un batch o iteraría
-            // Por ahora enviamos el conjunto de remitos seleccionados
-            const res = await COTService.regenerar({
-                ...cotForm,
-                remitos: cotForm.itemsSeleccionados
-            });
-            setCotResult(res.data);
+            // Asegurarse de que los remitos estén cargados para validar
+            const id = hoja.TRANSACCIONID || hoja.DOCNROINTERNO;
+            let remitos = remitosPorHoja[id];
+            
+            if (!remitos) {
+                const res = await FinnegansService.getRemitos(hoja.TRANSACCIONID || hoja.DOCNROINTERNO, hoja.FECHA);
+                remitos = res.data;
+                setRemitosPorHoja(prev => ({ ...prev, [id]: remitos }));
+            }
+
+            if (!remitos || remitos.length === 0) {
+                setAlertModal({
+                    show: true,
+                    title: 'Sin remitos',
+                    message: 'No se han encontrado remitos para solicitar la regeneración de COT en esta Hoja de Ruta.',
+                    type: 'warning'
+                });
+                return;
+            }
+
+            setSelectedHoja(hoja);
+            setCotForm(prev => ({
+                ...prev,
+                cuitTransportista: hoja?.TRANSPORTISTAID || '',
+                razonSocialTransportista: hoja?.TRANSPORTISTA || '',
+            }));
+            setCurrentStep(1);
         } catch (err) {
-            setError(err.response?.data?.error || 'Error enviando COT a ARBA.');
+            console.error('Error al preparar configuración:', err);
+            setError('Error al obtener los remitos de la hoja de ruta.');
         } finally {
             setLoading(false);
         }
     };
 
+    const validarPatente = (p) => {
+        if (!p) return true;
+        // Solo letras y números (alfanumérico)
+        return /^[A-Z0-9]+$/.test(p);
+    };
+
+    const procesarUnRemito = async (remito) => {
+        try {
+            // 1. Obtener detalle extendido del remito vía USR_ViewApiCOTMasivo
+            const resDetalle = await FinnegansService.getDetalleRemitoCOT(remito.id || remito.remitoId);
+            const detalleRemito = Array.isArray(resDetalle.data) ? resDetalle.data[0] : resDetalle.data;
+
+            if (!detalleRemito) {
+                throw new Error('No se pudo obtener el detalle extendido del remito.');
+            }
+
+            // 2. Unir con los datos del formulario (patentes, transportista)
+            const payload = {
+                ...detalleRemito,
+                ...cotForm,
+                remitos: [detalleRemito] // El servicio espera un array o el objeto remito directamente
+            };
+
+            // 3. Generar y enviar a ARBA
+            const resCOT = await COTService.regenerar(payload);
+            return {
+                remitoId: remito.id || remito.remitoId,
+                comprobante: remito.comprobante,
+                success: resCOT.data.success,
+                nroCOT: resCOT.data.nroCOT,
+                error: resCOT.data.errores?.[0]?.descripcion,
+                detalle: detalleRemito,
+                archivo: resCOT.data.archivoGenerado
+            };
+        } catch (err) {
+            console.error(`Error procesando remito ${remito.id || remito.remitoId}:`, err);
+            return {
+                remitoId: remito.id || remito.remitoId,
+                comprobante: remito.comprobante,
+                success: false,
+                error: err.response?.data?.error || err.message || 'Error inesperado',
+                detalle: null
+            };
+        }
+    };
+
+    /**
+     * Dispara la descarga de un archivo TXT en el navegador.
+     * Importante: Se usa un Blob con encoding latin1 para compatibilidad con ARBA.
+     */
+    const descargarTXT = (contenido, nombreArchivo) => {
+        try {
+            // Convertir string a Uint8Array usando latin1 (ISO-8859-1)
+            const encoder = new TextEncoder(); // UTF-8 por defecto
+            // Para latin1 real en el navegador, usamos una técnica de mapeo
+            const bytes = new Uint8Array(contenido.length);
+            for (let i = 0; i < contenido.length; i++) {
+                bytes[i] = contenido.charCodeAt(i) & 0xff;
+            }
+            
+            const blob = new Blob([bytes], { type: 'text/plain;charset=ISO-8859-1' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = nombreArchivo || 'cot_arba.txt';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Error descargando el archivo:', err);
+            setAlertModal({
+                show: true,
+                title: 'Error de Descarga',
+                message: 'No se pudo generar el archivo para descarga local.',
+                type: 'error'
+            });
+        }
+    };
+
+    const handlePreConfirm = () => {
+        if (!cotForm.razonSocialTransportista || !cotForm.patente) {
+            setAlertModal({
+                show: true,
+                title: 'Datos Faltantes',
+                message: 'Por favor, complete los campos obligatorios (Transportista y Patente) antes de continuar.',
+                type: 'warning'
+            });
+            return;
+        }
+        if (!validarPatente(cotForm.patente)) {
+            setAlertModal({
+                show: true,
+                title: 'Patente Inválida',
+                message: 'El formato de la patente principal no es válido. Asegúrese de ingresar solo letras y números.',
+                type: 'warning'
+            });
+            return;
+        }
+        setError('');
+        setShowConfirmModal(true);
+    };
+
+    const enviarBatchARBA = async () => {
+        const id = selectedHoja.TRANSACCIONID || selectedHoja.DOCNROINTERNO;
+        const remitos = remitosPorHoja[id] || [];
+
+        if (remitos.length === 0) {
+            setError('No hay remitos para procesar en esta Hoja de Ruta.');
+            return;
+        }
+
+        setShowConfirmModal(false);
+        setProcessingBatch(true);
+        setBatchResults([]);
+        setCurrentBatchIndex(0);
+        setCurrentStep(2); 
+
+        for (let i = 0; i < remitos.length; i++) {
+            const remito = remitos[i];
+            setCurrentBatchIndex(i);
+            const resultado = await procesarUnRemito(remito);
+            
+            // Si el servidor devolvió el contenido del archivo, lo adjuntamos al resultado
+            // Nota: procesarUnRemito ya lo hace en la línea 206 (archivo)
+            
+            setBatchResults(prev => [...prev, resultado]);
+        }
+
+        setProcessingBatch(false);
+    };
+
+    const reintentarRemito = async (index) => {
+        const resultOriginal = batchResults[index];
+        if (resultOriginal.success) return;
+
+        setRetryingIndex(index);
+        const nuevoResultado = await procesarUnRemito(resultOriginal);
+        
+        setBatchResults(prev => {
+            const copy = [...prev];
+            copy[index] = nuevoResultado;
+            return copy;
+        });
+        setRetryingIndex(null);
+    };
+
     const resetFlow = () => {
         setCurrentStep(0);
-        setSelectedRemitos({});
-        setCotResult(null);
+        setSelectedHoja(null);
+        setBatchResults([]);
         setError('');
     };
 
@@ -188,15 +329,15 @@ const RegeneracionCOT = () => {
 
     const renderRangoSelector = () => (
         <div style={{ marginBottom: '24px' }}>
-            <div style={{ 
+            <div style={{
                 display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px',
                 background: 'var(--surface-hover)', padding: '12px 20px', borderRadius: 'var(--radius-lg)',
                 border: '1px solid var(--border)'
             }}>
                 <Calendar size={18} style={{ color: 'var(--dy-red)' }} />
                 <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Ver Hojas de Ruta de los últimos:</span>
-                <select 
-                    value={rangoDias} 
+                <select
+                    value={rangoDias}
                     onChange={(e) => setRangoDias(parseInt(e.target.value))}
                     className="dy-select"
                 >
@@ -213,9 +354,9 @@ const RegeneracionCOT = () => {
 
             <div style={{ position: 'relative' }}>
                 <Search size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input 
+                <input
                     type="text"
-                    placeholder="Filtrar por número de Hoja de Ruta..."
+                    placeholder="Filtrar por HR, Transportista, Chofer, Viaje o Patente..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     style={{ paddingLeft: '48px', width: '100%' }}
@@ -229,25 +370,47 @@ const RegeneracionCOT = () => {
             {hojasFiltradas.map((hoja, i) => {
                 const id = hoja.TRANSACCIONID || hoja.DOCNROINTERNO;
                 const isExpanded = expandedHoja === id;
-                const seleccionados = (selectedRemitos[id] || []).length;
 
                 return (
                     <div key={id} className={`dy-accordion ${isExpanded ? 'expanded' : ''}`}>
-                        <div className="dy-accordion-header" onClick={() => toggleHoja(hoja)}>
-                            <div className="dy-accordion-info">
+                        <div className="dy-accordion-header">
+                            <div className="dy-accordion-info" onClick={() => toggleHoja(hoja)} style={{ cursor: 'pointer', flex: 1 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                     <span className="dy-accordion-title">{hoja.DOCNROINTERNO}</span>
+                                    <span className="badge badge-outline">ID: {hoja.TRANSACCIONID}</span>
                                     <span className="badge badge-outline">{hoja.FECHA}</span>
+                                    <span className={`badge ${hoja.ESTADOHR === 'Pendiente' ? 'badge-warning' : 'badge-info'}`}>
+                                        {hoja.ESTADOHR || 'S/E'}
+                                    </span>
                                 </div>
                                 <div className="dy-accordion-subtitle">
-                                    <Truck size={14} /> {hoja.TRANSPORTISTA} | <Package size={14} /> Patente: {hoja.PATENTE || 'S/P'}
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px' }}>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }} title="Transportista">
+                                            <Truck size={14} /> {hoja.TRANSPORTISTA}
+                                        </span>
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }} title="Patente Vehículo">
+                                            <Package size={14} /> {hoja.PATENTE || 'S/P'}
+                                        </span>
+                                        {hoja.CHOFER && (
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }} title="Chofer">
+                                                <User size={14} /> {hoja.CHOFER}
+                                            </span>
+                                        )}
+                                        {hoja.VIAJE && (
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }} title="Detalle del Viaje">
+                                                <MapPin size={14} /> {hoja.VIAJE}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                {seleccionados > 0 && (
-                                    <span className="badge badge-success">{seleccionados} remitos sel.</span>
-                                )}
-                                {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                                <Button size="sm" onClick={(e) => { e.stopPropagation(); irAConfigurar(hoja); }}>
+                                    Regenerar COT
+                                </Button>
+                                <div onClick={() => toggleHoja(hoja)} style={{ cursor: 'pointer', display: 'flex' }}>
+                                    {isExpanded ? <ChevronUp size={20} title="Contraer" /> : <ChevronDown size={20} title="Expandir" />}
+                                </div>
                             </div>
                         </div>
 
@@ -260,32 +423,24 @@ const RegeneracionCOT = () => {
                                         <table className="results-table-sm">
                                             <thead>
                                                 <tr>
-                                                    <th style={{ width: '40px' }}></th>
+                                                    <th>Transacción ID</th>
                                                     <th>Cliente</th>
-                                                    <th>Pedido</th>
+                                                    <th>Comprobante</th>
                                                     <th>Fecha</th>
-                                                    <th>Despacho</th>
+                                                    <th>Estado</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {(remitosPorHoja[id] || []).map((remito, idx) => {
-                                                    const isSelected = (selectedRemitos[id] || []).some(r => r.id === remito.id);
                                                     return (
-                                                        <tr key={idx} onClick={() => toggleRemito(id, remito)}>
-                                                            <td>
-                                                                <input 
-                                                                    type="checkbox" 
-                                                                    checked={isSelected}
-                                                                    onChange={() => {}} // Se maneja con el tr.onClick
-                                                                />
-                                                            </td>
-                                                            <td style={{ fontWeight: 600 }}>{remito.cliente}</td>
-                                                            <td>
-                                                                <div style={{ fontSize: '0.8rem' }}>{remito.pedidoTipo}</div>
-                                                                <div>{remito.comprobante}</div>
-                                                            </td>
+                                                        <tr key={idx}>
+                                                            <td style={{ fontWeight: 700 }}>{remito.id}</td>
+                                                            <td>{remito.cliente}</td>
+                                                            <td>{remito.comprobante}</td>
                                                             <td>{remito.fecha}</td>
-                                                            <td>{remito.despacho}</td>
+                                                            <td>
+                                                                <span className="badge badge-outline">{remito.pedidoTipo}</span>
+                                                            </td>
                                                         </tr>
                                                     );
                                                 })}
@@ -347,105 +502,206 @@ const RegeneracionCOT = () => {
                             <p>Intente ampliando el rango de días o verificando la conexión.</p>
                         </div>
                     )}
-                    
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '32px' }}>
-                        <Button onClick={irAConfigurar} size="lg">
-                            Continuar <ArrowRight size={18} />
-                        </Button>
-                    </div>
                 </Card>
             )}
 
             {/* STEP 1: Formulario y Envío */}
-            {currentStep === 1 && !cotResult && (
+            {currentStep === 1 && (
                 <Card>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                        <h2 className="form-section-title">Configurar Nuevo Transporte</h2>
-                        <Button variant="ghost" onClick={() => setCurrentStep(0)}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '24px' }}>
+                        <Button variant="ghost" onClick={resetFlow} disabled={processingBatch}>
                             <ArrowLeft size={18} /> Volver
                         </Button>
                     </div>
 
-                    <div className="form-grid" style={{ marginBottom: '32px' }}>
-                        <div className="form-section" style={{ gridColumn: 'span 2' }}>
-                            <div className="form-section-title">
-                                <Truck size={16} /> Vehículo y Transportista
-                            </div>
-                            <div className="form-grid">
-                                <Input 
-                                    label="Transportista"
-                                    value={cotForm.razonSocialTransportista}
-                                    onChange={(e) => setCotForm({...cotForm, razonSocialTransportista: e.target.value})}
-                                />
-                                <Input 
-                                    label="CUIT"
-                                    value={cotForm.cuitTransportista}
-                                    onChange={(e) => setCotForm({...cotForm, cuitTransportista: e.target.value})}
-                                />
-                                <Input 
-                                    label="Patente Camión *"
-                                    placeholder="Ej: LLL-123"
-                                    value={cotForm.patente}
-                                    onChange={(e) => setCotForm({...cotForm, patente: e.target.value.toUpperCase()})}
-                                />
-                                <Input 
-                                    label="Patente Acoplado"
-                                    placeholder="Ej: LLL-123"
-                                    value={cotForm.patenteAcoplado}
-                                    onChange={(e) => setCotForm({...cotForm, patenteAcoplado: e.target.value.toUpperCase()})}
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="form-section">
-                        <div className="form-section-title">Remitos Seleccionados ({cotForm.itemsSeleccionados.length})</div>
-                        <div className="selected-items-grid">
-                            {cotForm.itemsSeleccionados.map((item, i) => (
-                                <div key={i} className="selected-item-tag">
-                                    <FileText size={14} />
-                                    <span>{item.despacho} - {item.cliente}</span>
+                    <>
+                            <div className="form-grid" style={{ marginBottom: '32px' }}>
+                                <div className="form-section" style={{ gridColumn: 'span 2' }}>
+                                    <div className="form-section-title">
+                                        <Truck size={16} /> Vehículo y Transportista
+                                    </div>
+                                    <div className="form-grid">
+                                        <Input
+                                            label="Transportista *"
+                                            placeholder="Buscar transportista..."
+                                            value={cotForm.razonSocialTransportista}
+                                            onChange={(e) => setCotForm({ ...cotForm, razonSocialTransportista: e.target.value })}
+                                        />
+                                        <Input
+                                            label="CUIT"
+                                            value={cotForm.cuitTransportista}
+                                            onChange={(e) => setCotForm({ ...cotForm, cuitTransportista: e.target.value })}
+                                        />
+                                        <Input
+                                            label="Patente Camión *"
+                                            placeholder="Ej: AB123CD"
+                                            value={cotForm.patente}
+                                            onChange={(e) => setCotForm({ ...cotForm, patente: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}
+                                        />
+                                        <Input
+                                            label="Patente Acoplado"
+                                            placeholder="Ej: XY987WZ (Opcional)"
+                                            value={cotForm.patenteAcoplado}
+                                            onChange={(e) => setCotForm({ ...cotForm, patenteAcoplado: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}
+                                        />
+                                    </div>
                                 </div>
-                            ))}
+                            </div>
+
+                            <div className="form-section" style={{ marginBottom: '32px' }}>
+                                <div className="form-section-title">
+                                    <FileText size={16} /> Resumen de Remitos a Procesar
+                                </div>
+                                <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                                    Se procesarán los remitos listados a continuación pertenecientes a la Hoja de Ruta <strong>{selectedHoja?.DOCNROINTERNO}</strong>.
+                                </p>
+                                <div className="results-table-container-sm">
+                                    <table className="results-table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Transacción ID</th>
+                                                <th>Cliente</th>
+                                                <th>Comprobante</th>
+                                                <th>Estado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {(remitosPorHoja[selectedHoja?.TRANSACCIONID || selectedHoja?.DOCNROINTERNO] || []).map((remito, idx) => (
+                                                <tr key={idx}>
+                                                    <td style={{ fontWeight: 700 }}>{remito.id}</td>
+                                                    <td>{remito.cliente}</td>
+                                                    <td>{remito.comprobante}</td>
+                                                    <td><span className="badge badge-outline">{remito.pedidoTipo}</span></td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '40px' }}>
+                                <Button
+                                    variant="primary"
+                                    size="lg"
+                                    style={{
+                                        background: 'linear-gradient(135deg, #e40521 0%, #b3041a 100%)',
+                                        boxShadow: '0 10px 20px rgba(228, 5, 33, 0.2)'
+                                    }}
+                                    onClick={handlePreConfirm}
+                                >
+                                    <Send size={18} /> Iniciar Regeneración Masiva
+                                </Button>
+                            </div>
+                        </>
+                </Card>
+            )}
+
+            {/* STEP 2: Regeneración COT (Progreso) */}
+            {currentStep === 2 && (
+                <Card>
+                    <div className="batch-processing-view">
+                        <div style={{ marginBottom: '24px' }}>
+                            {processingBatch && retryingIndex === null ? (
+                                <div style={{ textAlign: 'center', padding: '20px' }}>
+                                    <div className="loader-inline" style={{ marginBottom: '12px' }}></div>
+                                    <h3>Procesando remitos... ({currentBatchIndex + 1} de {(remitosPorHoja[selectedHoja?.TRANSACCIONID || selectedHoja?.DOCNROINTERNO] || []).length})</h3>
+                                </div>
+                            ) : (
+                                <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+                                    <h2 style={{ color: 'var(--success)' }}>
+                                        {batchResults.every(r => r.success) ? 'Proceso Finalizado' : 'Resumen del Proceso'}
+                                    </h2>
+                                    <p>Se han procesado los remitos de la hoja de ruta.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <table className="results-table">
+                            <thead>
+                                <tr>
+                                    <th>Remito</th>
+                                    <th>Estado</th>
+                                    <th>Nro COT / Error</th>
+                                    <th style={{ textAlign: 'right' }}>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {batchResults.map((res, idx) => (
+                                    <tr key={idx} className={retryingIndex === idx ? 'row-processing' : ''}>
+                                        <td style={{ fontWeight: 600 }}>{res.comprobante}</td>
+                                        <td>
+                                            {retryingIndex === idx ? (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)' }}>
+                                                    <div className="loader-inline-xs"></div>
+                                                    <span style={{ fontSize: '0.8rem' }}>Reintentando...</span>
+                                                </div>
+                                            ) : res.success ? (
+                                                <span className="badge badge-success">Éxito</span>
+                                            ) : (
+                                                <span className="badge badge-error">Error</span>
+                                            )}
+                                        </td>
+                                        <td style={{ fontSize: '0.9rem' }}>
+                                            {res.success ? (
+                                                <strong style={{ color: 'var(--success)' }}>{res.nroCOT}</strong>
+                                            ) : (
+                                                <span style={{ color: 'var(--error)' }}>{res.error}</span>
+                                            )}
+                                        </td>
+                                        <td style={{ textAlign: 'right' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                                                {res.detalle && (
+                                                    <Button 
+                                                        size="xs" 
+                                                        variant="ghost" 
+                                                        title="Ver Detalle Técnico Finnegans"
+                                                        onClick={() => setViewingDetalle(res.detalle)}
+                                                    >
+                                                        <Eye size={14} />
+                                                    </Button>
+                                                )}
+                                                {res.archivo && (
+                                                    <Button 
+                                                        size="xs" 
+                                                        variant="ghost" 
+                                                        title="Descargar archivo TXT para ARBA"
+                                                        style={{ color: 'var(--success)' }}
+                                                        onClick={() => descargarTXT(res.archivo.contenido, res.archivo.nombreArchivo)}
+                                                    >
+                                                        <Download size={14} />
+                                                    </Button>
+                                                )}
+                                                {!res.success && retryingIndex === null && !processingBatch && (
+                                                    <Button 
+                                                        size="xs" 
+                                                        variant="outline" 
+                                                        onClick={() => reintentarRemito(idx)}
+                                                        title="Reintentar este remito"
+                                                    >
+                                                        <RefreshCcw size={14} />
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+
+                        <div style={{ marginTop: '32px', textAlign: 'center' }}>
+                            <Button 
+                                onClick={resetFlow} 
+                                variant="secondary"
+                                disabled={processingBatch || retryingIndex !== null}
+                            >
+                                <RefreshCcw size={18} title="Volver a empezar" /> Finalizar y Volver
+                            </Button>
                         </div>
                     </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '40px' }}>
-                        <Button 
-                            variant="primary" 
-                            size="lg" 
-                            style={{ 
-                                background: 'linear-gradient(135deg, #e40521 0%, #b3041a 100%)',
-                                boxShadow: '0 10px 20px rgba(228, 5, 33, 0.2)' 
-                            }}
-                            onClick={() => setShowConfirmModal(true)}
-                        >
-                            <Send size={18} /> Generar nuevo COT
-                        </Button>
-                    </div>
                 </Card>
             )}
 
-            {/* Resultado */}
-            {cotResult && (
-                <Card style={{ textAlign: 'center', padding: '60px' }}>
-                    {cotResult.success ? (
-                        <>
-                            <div className="success-icon-large"><CheckCircle size={64} /></div>
-                            <h2 style={{ fontSize: '2rem', marginBottom: '16px' }}>COT Generado con Éxito</h2>
-                            <div className="cot-number-display">{cotResult.nroCOT}</div>
-                            <p style={{ color: 'var(--text-muted)', marginBottom: '40px' }}>Se ha generado la regeneración para los remitos seleccionados.</p>
-                        </>
-                    ) : (
-                        <>
-                            <div className="error-icon-large"><AlertCircle size={64} /></div>
-                            <h2 style={{ fontSize: '2rem', marginBottom: '16px', color: 'var(--error)' }}>Error ARBA</h2>
-                            <p>{cotResult.errores?.[0]?.descripcion || 'Ocurrió un error inesperado.'}</p>
-                        </>
-                    )}
-                    <Button onClick={resetFlow} variant="secondary"><RefreshCcw size={18} /> Volver a Empezar</Button>
-                </Card>
-            )}
+            {/* Modal de Alertas/Validaciones */}
 
             {/* Modal de Alertas/Validaciones */}
             <Modal
@@ -461,12 +717,27 @@ const RegeneracionCOT = () => {
             <Modal
                 isOpen={showConfirmModal}
                 onClose={() => setShowConfirmModal(false)}
-                title="¿Confirmar Regeneración?"
+                title="¿Confirmar Regeneración Masiva?"
                 type="warning"
-                onConfirm={enviarARBA}
-                confirmLabel="Sí, Generar COT"
+                onConfirm={enviarBatchARBA}
+                confirmLabel="Sí, Generar COTs"
             >
-                Usted está por generar un nuevo COT para <strong>{cotForm.itemsSeleccionados.length} remitos</strong> con la patente <strong>{cotForm.patente}</strong>. Esta acción se presentará ante ARBA.
+                Usted está por generar nuevos COTs para <strong>todos los remitos</strong> de la hoja de ruta. Esta acción presentará múltiples solicitudes ante ARBA.
+            </Modal>
+
+            <Modal
+                isOpen={!!viewingDetalle}
+                onClose={() => setViewingDetalle(null)}
+                title="Detalle del Remito (Finnegans)"
+                maxWidth="800px"
+                confirmLabel="Cerrar"
+                showCancel={false}
+            >
+                <div style={{ maxHeight: '400px', overflow: 'auto' }}>
+                    <pre style={{ fontSize: '0.8rem', background: '#f5f5f5', padding: '16px', borderRadius: '4px' }}>
+                        {JSON.stringify(viewingDetalle, null, 2)}
+                    </pre>
+                </div>
             </Modal>
         </div>
     );

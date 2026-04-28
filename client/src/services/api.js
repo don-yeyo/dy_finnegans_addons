@@ -13,8 +13,10 @@ export const FinnegansService = {
         api.get(`/finnegans/hojas-ruta/${hojaRutaId}`),
     buscarPorRango: (dias) =>
         api.get('/finnegans/hojas-ruta/rango', { params: { dias } }),
-    getRemitos: (hojaRutaId) =>
-        api.get(`/finnegans/hojas-ruta/${hojaRutaId}/remitos`),
+    getRemitos: (hojaRutaId, fecha) => 
+        api.get(`/finnegans/hojas-ruta/${hojaRutaId}/remitos`, { params: { fecha } }),
+    getDetalleRemitoCOT: (remitoId) =>
+        api.get(`/finnegans/remitos/${remitoId}/detalle-cot`),
 };
 
 export const COTService = {
