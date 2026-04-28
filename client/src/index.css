@@ -774,3 +774,53 @@ input:focus, select:focus {
   margin-bottom: 24px;
   border: 3px dashed var(--success);
 }
+
+/* Login Styling Fixes */
+.login-container {
+  padding: 24px;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.btn-microsoft,
+.btn-google {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px 24px !important;
+  gap: 12px !important;
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+  border-radius: 12px !important;
+  width: 100% !important;
+  max-width: 320px !important;
+  min-width: 280px !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  background-color: var(--btn-primary-bg) !important;
+  color: var(--btn-primary-text) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow-sm) !important;
+  cursor: pointer !important;
+}
+
+.btn-microsoft:hover,
+.btn-google:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: var(--shadow) !important;
+  border-color: var(--primary) !important;
+}
+
+.login-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  align-items: center;
+  margin-top: 24px;
+}
