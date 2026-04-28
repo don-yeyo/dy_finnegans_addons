@@ -49,9 +49,17 @@ export const AuthProvider = ({ children }) => {
 
     const login = () => {
         if (inProgress === InteractionStatus.None) {
-            instance.loginRedirect(loginRequest).catch(e => {
-                console.error(e);
-            });
+            instance.loginPopup(loginRequest)
+                .then(response => {
+                    console.log("[MSAL] Login exitoso:", response.account.username);
+                })
+                .catch(e => {
+                    if (e.errorCode === "interaction_in_progress") {
+                        console.warn("[MSAL] Interacción en curso detectada. Intentando limpiar estado...");
+                    } else {
+                        console.error("[MSAL] Error en login:", e);
+                    }
+                });
         } else {
             console.warn("[MSAL] Bloqueado login por interacción en curso:", inProgress);
         }
