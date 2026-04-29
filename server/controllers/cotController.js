@@ -12,13 +12,15 @@ const arba = new ArbaService();
 const regenerarCOT = async (req, res) => {
     try {
         const datos = req.body;
+        console.log('[COT] Datos recibidos en el servidor:', JSON.stringify(datos, null, 2));
 
         // Validaciones básicas
         const camposRequeridos = ['cuitTransportista', 'patente', 'fechaPartida'];
         const faltantes = camposRequeridos.filter(c => !datos[c]);
         if (faltantes.length > 0) {
             return res.status(400).json({
-                error: `Campos requeridos faltantes: ${faltantes.join(', ')}`
+                error: `Campos requeridos faltantes: ${faltantes.join(', ')}`,
+                recibido: datos // Devolvemos lo que recibimos para debug
             });
         }
 
