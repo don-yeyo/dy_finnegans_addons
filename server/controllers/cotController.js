@@ -11,8 +11,22 @@ const arba = new ArbaService();
  */
 const regenerarCOT = async (req, res) => {
     try {
-        const datos = req.body;
-        console.log('[COT] Datos recibidos en el servidor:', JSON.stringify(datos, null, 2));
+        let datos = req.body;
+        
+        // Si recibimos un Buffer (común en Netlify), lo convertimos a objeto
+        if (Buffer.isBuffer(datos)) {
+            try {
+                datos = JSON.parse(datos.toString('utf-8'));
+            } catch (e) {
+                console.error('[COT] Error parseando Buffer a JSON:', e.message);
+            }
+        } else if (typeof datos === 'string') {
+            try {
+                datos = JSON.parse(datos);
+            } catch (e) {}
+        }
+
+        console.log('[COT] Datos procesados en el servidor:', JSON.stringify(datos, null, 2));
 
         // Validaciones básicas
         const camposRequeridos = ['cuitTransportista', 'patente', 'fechaPartida'];
