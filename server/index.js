@@ -54,10 +54,7 @@ app.use((err, req, res, next) => {
 
 // Iniciar el servidor
 app.listen(PORT, () => {
-    console.log('=========================================');
     console.log(`[Finnegans Addons] v1.0.4 - Server running on port ${PORT}`);
-    console.log(`[DEBUG] ARBA Service Debug Logs Enabled`);
-    console.log('=========================================');
 });
 
 module.exports = app;

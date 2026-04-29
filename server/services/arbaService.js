@@ -54,11 +54,9 @@ class ArbaService {
         
         const remitos = Array.isArray(datos) ? datos : [datos];
         for (const remito of remitos) {
-            console.log(`[ARBA] Procesando Remito: ${remito.CODIGO_DOC || remito.id}. Importe: ${remito.IMPORTE || remito.importeTotal}`);
             lineas.push(this._generarRemito(remito));
             if (remito.productos) {
                 for (const prod of remito.productos) {
-                    console.log(`[ARBA]   -> Producto: ${prod.codigoArba || prod.CODIGO_UNICO_PRODUCTO}. Cantidad: ${prod.cantidad || prod.CANTIDAD}`);
                     lineas.push(this._generarProducto(prod));
                 }
             }
@@ -171,7 +169,6 @@ class ArbaService {
 
     async enviarCOT(contenido, nombreArchivo) {
         try {
-            console.log(`[ARBA] >>> INICIANDO ENVÍO A ARBA <<<`);
             const tempPath = path.join(this.localPath, nombreArchivo);
             const fullPath = path.resolve(tempPath);
 

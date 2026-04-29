@@ -301,7 +301,17 @@ const RegeneracionCOT = () => {
 
         setShowConfirmModal(false);
         setProcessingBatch(true);
-        setBatchResults([]);
+        
+        // Inicializar la grilla con todos los remitos en estado pendiente
+        const initialResults = remitos.map(r => ({
+            remitoId: r.id || r.remitoId,
+            comprobante: r.comprobante,
+            success: false,
+            pending: true,
+            error: null
+        }));
+        setBatchResults(initialResults);
+        
         setCurrentBatchIndex(0);
         setCurrentStep(2); 
 
@@ -310,10 +320,11 @@ const RegeneracionCOT = () => {
             setCurrentBatchIndex(i);
             const resultado = await procesarUnRemito(remito);
             
-            // Si el servidor devolvió el contenido del archivo, lo adjuntamos al resultado
-            // Nota: procesarUnRemito ya lo hace en la línea 206 (archivo)
-            
-            setBatchResults(prev => [...prev, resultado]);
+            setBatchResults(prev => {
+                const copy = [...prev];
+                copy[i] = { ...resultado, pending: false };
+                return copy;
+            });
         }
 
         setProcessingBatch(false);
@@ -486,9 +497,12 @@ const RegeneracionCOT = () => {
             <div className="stepper">
                 {STEPS.map((step, i) => (
                     <React.Fragment key={i}>
-                        <div className={`stepper-step ${i === currentStep ? 'active' : ''} ${i < currentStep ? 'completed' : ''}`}>
+                        <div className={`stepper-step 
+                            ${i === currentStep ? 'active' : ''} 
+                            ${i < currentStep || (i === 2 && batchResults.length > 0 && !processingBatch) ? 'completed' : ''}
+                        `}>
                             <div className="stepper-circle">
-                                {i < currentStep ? <CheckCircle size={20} /> : i + 1}
+                                {(i < currentStep || (i === 2 && batchResults.length > 0 && !processingBatch)) ? <CheckCircle size={20} /> : i + 1}
                             </div>
                             <span className="stepper-label">{step.label}</span>
                         </div>
@@ -646,7 +660,9 @@ const RegeneracionCOT = () => {
                                     <tr key={idx} className={retryingIndex === idx ? 'row-processing' : ''}>
                                         <td style={{ fontWeight: 600 }}>{res.comprobante}</td>
                                         <td>
-                                            {retryingIndex === idx ? (
+                                            {res.pending ? (
+                                                <span className="badge badge-outline">Pendiente</span>
+                                            ) : retryingIndex === idx ? (
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)' }}>
                                                     <div className="loader-inline-xs"></div>
                                                     <span style={{ fontSize: '0.8rem' }}>Reintentando...</span>
@@ -658,7 +674,9 @@ const RegeneracionCOT = () => {
                                             )}
                                         </td>
                                         <td style={{ fontSize: '0.9rem' }}>
-                                            {res.success ? (
+                                            {res.pending ? (
+                                                <span style={{ color: 'var(--text-muted)' }}>Esperando...</span>
+                                            ) : res.success ? (
                                                 <strong style={{ color: 'var(--success)' }}>{res.nroCOT}</strong>
                                             ) : (
                                                 <span style={{ color: 'var(--error)' }}>{res.error}</span>
