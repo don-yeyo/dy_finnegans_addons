@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, useTheme } from "./config/ThemeContext";
 import { AuthProvider, useAuth } from './config/AuthContext';
+import { GoogleOAuthProvider, useGoogleLogin } from '@react-oauth/google';
+import axios from 'axios';
 import './index.css';
 
 import Layout from './components/Layout';
@@ -16,8 +18,22 @@ import googleLogo from './assets/google-logo.svg';
 import { Sun, Moon } from 'lucide-react';
 
 const AuthGate = ({ children }) => {
-    const { isAuthenticated, loading, login } = useAuth();
+    const { isAuthenticated, loading, login, loginGoogle } = useAuth();
     const { theme, toggleTheme } = useTheme();
+
+    const handleGoogleLogin = useGoogleLogin({
+        onSuccess: async (tokenResponse) => {
+            try {
+                const res = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+                    headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
+                });
+                loginGoogle(res.data);
+            } catch (error) {
+                console.error('Error fetching Google user info:', error);
+            }
+        },
+        onError: (error) => console.log('Login Failed:', error)
+    });
 
     if (loading) {
         return (
@@ -98,7 +114,7 @@ const AuthGate = ({ children }) => {
 
                             <Button
                                 className="btn-google"
-                                onClick={() => alert('Próximamente disponible')}
+                                onClick={() => handleGoogleLogin()}
                             >
                                 <img
                                     src={googleLogo}
@@ -119,21 +135,23 @@ const AuthGate = ({ children }) => {
 
 function App() {
     return (
-        <AuthProvider>
-            <ThemeProvider>
-                <Router>
-                    <AuthGate>
-                        <Layout>
-                            <Routes>
-                                <Route path="/" element={<Dashboard />} />
-                                <Route path="/regeneracion-cot" element={<RegeneracionCOT />} />
-                                <Route path="/configuracion" element={<Settings />} />
-                            </Routes>
-                        </Layout>
-                    </AuthGate>
-                </Router>
-            </ThemeProvider>
-        </AuthProvider>
+        <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
+            <AuthProvider>
+                <ThemeProvider>
+                    <Router>
+                        <AuthGate>
+                            <Layout>
+                                <Routes>
+                                    <Route path="/" element={<Dashboard />} />
+                                    <Route path="/regeneracion-cot" element={<RegeneracionCOT />} />
+                                    <Route path="/configuracion" element={<Settings />} />
+                                </Routes>
+                            </Layout>
+                        </AuthGate>
+                    </Router>
+                </ThemeProvider>
+            </AuthProvider>
+        </GoogleOAuthProvider>
     );
 }
 

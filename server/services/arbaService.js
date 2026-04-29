@@ -169,58 +169,83 @@ class ArbaService {
 
     async enviarCOT(contenido, nombreArchivo) {
         try {
-            const tempPath = path.join(this.localPath, nombreArchivo);
-            const fullPath = path.resolve(tempPath);
-
-            if (!fs.existsSync(this.localPath)) {
-                fs.mkdirSync(this.localPath, { recursive: true });
-            }
-            fs.writeFileSync(tempPath, contenido);
-
-            const curlCmd = `curl.exe -s -k -L "${this.cotUrl}" -H "Cookie: ${this.cookie}" -F "user=${this.cotUser}" -F "password=${this.cotPassword}" -F "file=@${fullPath}"`;
+            const form = new FormData();
+            form.append('user', this.cotUser);
+            form.append('password', this.cotPassword);
             
-            const { exec } = require('child_process');
-            return new Promise((resolve) => {
-                exec(curlCmd, { timeout: 60000 }, (error, stdout, stderr) => {
-                    if (error) {
-                        return resolve({ success: false, errores: [{ codigo: 'CURL_ERROR', descripcion: error.message }] });
-                    }
-
-                    fs.writeFileSync(path.join(this.localPath, 'arba_last_response.txt'), stdout);
-
-                    const nroCotMatch = stdout.match(/<cot>(\d+)<\/cot>/);
-                    if (nroCotMatch) {
-                        return resolve({ success: true, nroCOT: nroCotMatch[1] });
-                    }
-
-                    const errores = [];
-                    const errorMatches = stdout.matchAll(/<error>\s*<codigo>(.*?)<\/codigo>\s*<descripcion>(.*?)<\/descripcion>/gs);
-                    for (const match of errorMatches) {
-                        errores.push({
-                            codigo: match[1].trim(),
-                            descripcion: match[2].trim(),
-                            tipo: 'VALIDACION'
-                        });
-                    }
-
-                    const tbErrorMatch = stdout.match(/<codigoError>(.*?)<\/codigoError>\s*<mensajeError>(.*?)<\/mensajeError>/s);
-                    if (tbErrorMatch) {
-                        errores.push({
-                            codigo: tbErrorMatch[1].trim(),
-                            descripcion: tbErrorMatch[2].trim(),
-                            tipo: 'ESTRUCTURA'
-                        });
-                    }
-
-                    if (errores.length === 0 && stdout.includes('Error')) {
-                        errores.push({ codigo: 'GENERIC_ERROR', descripcion: 'Error no identificado en la respuesta de ARBA.' });
-                    }
-
-                    resolve({ success: false, errores });
-                });
+            // Creamos un Buffer en latin1 para el contenido del archivo para asegurar compatibilidad con ARBA
+            const fileBuffer = Buffer.from(contenido, 'latin1');
+            
+            form.append('file', fileBuffer, {
+                filename: nombreArchivo,
+                contentType: 'text/plain',
             });
+
+            const headers = {
+                ...form.getHeaders(),
+            };
+            
+            // Si hay una cookie configurada, la añadimos (aunque axios lo maneja mejor con jar, aquí lo ponemos manual)
+            if (this.cookie) {
+                headers['Cookie'] = this.cookie;
+            }
+
+            console.log(`[ARBA] Enviando archivo ${nombreArchivo} (${fileBuffer.length} bytes) via Axios...`);
+
+            const response = await axios.post(this.cotUrl, form, {
+                headers,
+                timeout: 60000 // 60 segundos
+            });
+
+            const responseText = response.data;
+
+            // Guardar respuesta para debug (solo si saveLocal está activo y no estamos en cloud)
+            if (this.saveLocal) {
+                try {
+                    fs.writeFileSync(path.join(this.localPath, 'arba_last_response.txt'), responseText);
+                } catch (e) {}
+            }
+
+            const nroCotMatch = responseText.match(/<cot>(\d+)<\/cot>/);
+            if (nroCotMatch) {
+                return { success: true, nroCOT: nroCotMatch[1] };
+            }
+
+            const errores = [];
+            const errorMatches = responseText.matchAll(/<error>\s*<codigo>(.*?)<\/codigo>\s*<descripcion>(.*?)<\/descripcion>/gs);
+            for (const match of errorMatches) {
+                errores.push({
+                    codigo: match[1].trim(),
+                    descripcion: match[2].trim(),
+                    tipo: 'VALIDACION'
+                });
+            }
+
+            const tbErrorMatch = responseText.match(/<codigoError>(.*?)<\/codigoError>\s*<mensajeError>(.*?)<\/mensajeError>/s);
+            if (tbErrorMatch) {
+                errores.push({
+                    codigo: tbErrorMatch[1].trim(),
+                    descripcion: tbErrorMatch[2].trim(),
+                    tipo: 'ESTRUCTURA'
+                });
+            }
+
+            if (errores.length === 0 && (responseText.includes('Error') || responseText.includes('error'))) {
+                errores.push({ codigo: 'GENERIC_ERROR', descripcion: 'Error no identificado en la respuesta de ARBA.' });
+            }
+
+            return { success: false, errores };
+
         } catch (error) {
-            return { success: false, errores: [{ codigo: 'EXCEPTION', descripcion: error.message }] };
+            console.error('[ARBA] Error en envío vía Axios:', error.message);
+            return { 
+                success: false, 
+                errores: [{ 
+                    codigo: 'AXIOS_ERROR', 
+                    descripcion: `Error de conexión: ${error.message}`,
+                    tipo: 'CONEXION'
+                }] 
+            };
         }
     }
 }

@@ -10,9 +10,23 @@ export const AuthProvider = ({ children }) => {
     const { instance, accounts, inProgress } = useMsal();
     const isMsAuthenticated = useIsAuthenticated();
     
+    const [googleUser, setGoogleUser] = useState(null);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+
+    // Cargar usuario de Google si existe en localStorage
+    useEffect(() => {
+        const storedGoogleUser = localStorage.getItem('google_user');
+        if (storedGoogleUser) {
+            try {
+                const parsed = JSON.parse(storedGoogleUser);
+                setGoogleUser(parsed);
+            } catch (e) {
+                localStorage.removeItem('google_user');
+            }
+        }
+    }, []);
 
     useEffect(() => {
         // BYPASS DE AUTENTICACION PARA DESARROLLO LOCAL
@@ -40,38 +54,50 @@ export const AuthProvider = ({ children }) => {
                 provider: 'microsoft',
                 avatar: null
             });
+            setLoading(false);
+        } else if (googleUser) {
+            setIsAuthenticated(true);
+            setUser({
+                name: googleUser.name,
+                email: googleUser.email,
+                provider: 'google',
+                avatar: googleUser.picture
+            });
+            setLoading(false);
         } else {
             setIsAuthenticated(false);
             setUser(null);
+            // Solo dejamos de cargar si no estamos en medio de un proceso de MSAL
+            if (inProgress === InteractionStatus.None) {
+                setLoading(false);
+            }
         }
-        setLoading(false);
-    }, [isMsAuthenticated, accounts]);
+    }, [isMsAuthenticated, accounts, googleUser, inProgress]);
 
     const login = () => {
         if (inProgress === InteractionStatus.None) {
-            instance.loginPopup(loginRequest)
-                .then(response => {
-                    console.log("[MSAL] Login exitoso:", response.account.username);
-                })
-                .catch(e => {
-                    if (e.errorCode === "interaction_in_progress") {
-                        console.warn("[MSAL] Interacción en curso detectada. Intentando limpiar estado...");
-                    } else {
-                        console.error("[MSAL] Error en login:", e);
-                    }
-                });
-        } else {
-            console.warn("[MSAL] Bloqueado login por interacción en curso:", inProgress);
+            instance.loginRedirect(loginRequest).catch(e => {
+                console.error("[MSAL] Error en loginRedirect:", e);
+            });
         }
     };
 
+    const loginGoogle = (decoded) => {
+        setGoogleUser(decoded);
+        localStorage.setItem('google_user', JSON.stringify(decoded));
+    };
+
     const logout = () => {
-        if (inProgress === InteractionStatus.None) {
+        if (user?.provider === 'microsoft') {
             instance.logoutRedirect({
-                postLogoutRedirectUri: "/",
+                postLogoutRedirectUri: window.location.origin,
             }).catch(e => {
                 console.error(e);
             });
+        } else {
+            setGoogleUser(null);
+            localStorage.removeItem('google_user');
+            window.location.reload();
         }
     };
 
@@ -82,6 +108,7 @@ export const AuthProvider = ({ children }) => {
             loading: loading || inProgress !== InteractionStatus.None,
             inProgress,
             login,
+            loginGoogle,
             logout
         }}>
             {children}
