@@ -14,7 +14,7 @@ class FinnegansService {
         this.tokenUrl = process.env.FINNEGANS_TOKEN_URL || 'https://api.teamplace.finneg.com/api/oauth/token';
         this.apiBase = process.env.FINNEGANS_API_BASE || 'https://api.finneg.com/api';
         this.empresaCod = process.env.FINNEGANS_EMPRESA_COD || 'EMPRE01';
-        this.timeout = (parseInt(process.env.FINNEGANS_TIMEOUT) || 30) * 1000;
+        this.timeout = (parseInt(process.env.FINNEGANS_TIMEOUT) || 60) * 1000;
         this.enviosReport = process.env.FINNEGANS_ENVIOS_REPORT || 'ANAHOJADERUTADY';
         this.hojasRutaReport = process.env.FINNEGANS_HOJAS_RUTA_REPORT || 'ANAHOJADERUTADY';
 
@@ -32,11 +32,13 @@ class FinnegansService {
         
         console.log(logContent);
         
+        /* Comentado para evitar colgar el server por IO
         try {
             fs.appendFileSync(path.join(__dirname, '../debug.log'), logContent);
         } catch (e) {
             console.error('Error escribiendo en debug.log:', e.message);
         }
+        */
     }
 
     /**

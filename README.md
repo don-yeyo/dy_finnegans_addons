@@ -119,8 +119,8 @@ dy_finnegans_addons/
 
 ## Notas Importantes
 
-- **ARBA COT**: El formato del archivo de remito debe ajustarse al diseño oficial vigente de ARBA. La implementación actual es una aproximación que debe validarse contra la especificación exacta.
-- **Finnegans Reports**: Los nombres de los reportes (`FINNEGANS_ENVIOS_REPORT`, `FINNEGANS_HOJAS_RUTA_REPORT`) deben coincidir con los configurados en Finnegans > App Builder > Diccionario de APIs.
+- **ARBA COT**: Implementado con el formato oficial **PIPE de 44 campos** (Registro 02) y **8 campos** (Registro 03). El sistema valida automáticamente las reglas de negocio (como los campos obligatorios para Consumidor Final) y envía el archivo mediante `curl.exe` nativo.
+- **Finnegans Reports**: Los nombres de los reportes (`FINNEGANS_ENVIOS_REPORT`, `FINNEGANS_HOJAS_RUTA_REPORT`) deben coincidir con los configurados en Finnegans > App Builder > Diccionario de APIs. Se recomienda un timeout de al menos 60s para reportes pesados.
 - **Autenticación**: Actualmente usa mock auth. Se puede integrar MSAL (Azure AD) o Google OAuth cuando se determine el modelo de autenticación.
 
 ## Licencia

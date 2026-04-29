@@ -4,6 +4,12 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
+process.on('uncaughtException', (err) => {
+    console.error('[CRITICAL] Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('[CRITICAL] Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -46,11 +52,9 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Error interno del servidor.' });
 });
 
-// Solo iniciar el servidor si no estamos en Netlify
-if (process.env.NODE_ENV !== 'production' || !process.env.NETLIFY) {
-    app.listen(PORT, () => {
-        console.log(`[Finnegans Addons] v1.0.4 - Server running on port ${PORT}`);
-    });
-}
+// Iniciar el servidor
+app.listen(PORT, () => {
+    console.log(`[Finnegans Addons] v1.0.4 - Server running on port ${PORT}`);
+});
 
 module.exports = app;

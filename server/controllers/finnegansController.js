@@ -100,13 +100,21 @@ const getDetalleHojaRuta = async (req, res) => {
  * GET /api/finnegans/remitos/:id/detalle-cot
  */
 const getDetalleRemitoCOT = async (req, res) => {
+    const { id } = req.params;
+    console.log(`[COT] Solicitando detalle extendido para remito ID: ${id}`);
     try {
-        const { id } = req.params;
         const detalle = await finnegans.getDetalleRemitoCOT(id);
+        console.log(`[COT] Detalle obtenido correctamente para ID: ${id}`);
         res.json(detalle);
     } catch (error) {
-        console.error('[Finnegans] Error obteniendo detalle de remito para COT:', error.message);
-        res.status(500).json({ error: 'Error obteniendo detalle de remito.' });
+        console.error(`[Finnegans] Error obteniendo detalle de remito ${id}:`, error.message);
+        if (error.response) {
+            console.error('[Finnegans] Respuesta de error de la API:', error.response.data);
+        }
+        res.status(500).json({ 
+            error: 'Error obteniendo detalle de remito de Finnegans.',
+            detalle: error.message 
+        });
     }
 };
 

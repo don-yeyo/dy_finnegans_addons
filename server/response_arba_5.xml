@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='ISO-8859-1'?><TBCOMPROBANTE>
+  <cuitEmpresa>30643380265</cuitEmpresa>
+  <numeroComprobante>111706139</numeroComprobante>
+  <nombreArchivo>TB_30643380265_001001_20260429_125502.txt</nombreArchivo>
+  <codigoIntegridad>85b0c0d9076f6ae248eace8966090b0d</codigoIntegridad>
+  <validacionesRemitos class="list">
+    <remito>
+      <numeroUnico>0910000500468453</numeroUnico>
+      <procesado>NO</procesado>
+      <errores class="list">
+        <error>
+          <codigo>95</codigo>
+          <descripcion>El campo IMPORTE es inválido o inexistente.</descripcion>
+        </error>
+      </errores>
+    </remito>
+  </validacionesRemitos>
+</TBCOMPROBANTE>

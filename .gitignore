@@ -1,4 +1,5 @@
 node_modules/
+
 .env
 .DS_Store
 dist/
@@ -10,3 +11,4 @@ server/package-lock.json
 
 # Documentación interna y credenciales (solo local)
 docs/
+server/txts/

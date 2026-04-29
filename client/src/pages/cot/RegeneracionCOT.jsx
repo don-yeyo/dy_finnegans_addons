@@ -6,7 +6,7 @@ import { FinnegansService, COTService } from '../../services/api';
 import {
     Search, ArrowLeft, ArrowRight, RefreshCcw, Eye, Send,
     Truck, FileText, CheckCircle, AlertCircle, Package, MapPin,
-    ChevronDown, ChevronUp, Filter, Calendar, User, Download
+    ChevronDown, ChevronUp, Filter, Calendar, User, Download, Copy
 } from 'lucide-react';
 
 const STEPS = [
@@ -181,28 +181,44 @@ const RegeneracionCOT = () => {
         try {
             // 1. Obtener detalle extendido del remito vía USR_ViewApiCOTMasivo
             const resDetalle = await FinnegansService.getDetalleRemitoCOT(remito.id || remito.remitoId);
-            const detalleRemito = Array.isArray(resDetalle.data) ? resDetalle.data[0] : resDetalle.data;
+            const filasReporte = Array.isArray(resDetalle.data) ? resDetalle.data : [resDetalle.data];
 
-            if (!detalleRemito) {
+            if (!filasReporte || filasReporte.length === 0 || !filasReporte[0]) {
                 throw new Error('No se pudo obtener el detalle extendido del remito.');
             }
 
-            // 2. Unir con los datos del formulario (patentes, transportista)
+            // 2. Agrupar productos y usar la primera fila para el cabezal
+            const primerFila = filasReporte[0];
+            const productosMapeados = filasReporte.map(fila => ({
+                codigoArba: fila.CODIGO_UNICO_PRODUCTO,
+                unidadMedida: fila.RENTAS_CODIGO_UNIDAD_MEDIDA,
+                cantidad: fila.CANTIDAD,
+                codigoPropio: fila.PROPIO_CODIGO_PRODUCTO,
+                descripcion: fila.PROPIO_DESCRIPCION_PRODUCTO,
+                unidadDescripcion: fila.PROPIO_DESCRIPCION_UNIDAD_MEDIDA,
+                cantidadAjustada: fila.CANTIDAD_AJUSTADA
+            }));
+
+            // 3. Unir con los datos del formulario (patentes, transportista)
             const payload = {
-                ...detalleRemito,
+                ...primerFila,
                 ...cotForm,
-                remitos: [detalleRemito] // El servicio espera un array o el objeto remito directamente
+                productos: productosMapeados
             };
 
-            // 3. Generar y enviar a ARBA
+            // 4. Generar y enviar a ARBA
             const resCOT = await COTService.regenerar(payload);
             return {
                 remitoId: remito.id || remito.remitoId,
                 comprobante: remito.comprobante,
                 success: resCOT.data.success,
                 nroCOT: resCOT.data.nroCOT,
-                error: resCOT.data.errores?.[0]?.descripcion,
-                detalle: detalleRemito,
+                error: resCOT.data.errores?.[0] 
+                    ? (resCOT.data.errores[0].codigo !== 'UNKNOWN' 
+                        ? `[${resCOT.data.errores[0].codigo}] ${resCOT.data.errores[0].descripcion}`
+                        : resCOT.data.errores[0].descripcion)
+                    : 'Error desconocido',
+                detalle: payload, // Guardamos el payload completo (Cabecera + Productos)
                 archivo: resCOT.data.archivoGenerado
             };
         } catch (err) {
@@ -729,15 +745,77 @@ const RegeneracionCOT = () => {
                 isOpen={!!viewingDetalle}
                 onClose={() => setViewingDetalle(null)}
                 title="Detalle del Remito (Finnegans)"
-                maxWidth="800px"
+                maxWidth="900px"
                 confirmLabel="Cerrar"
                 showCancel={false}
             >
-                <div style={{ maxHeight: '400px', overflow: 'auto' }}>
-                    <pre style={{ fontSize: '0.8rem', background: '#f5f5f5', padding: '16px', borderRadius: '4px' }}>
-                        {JSON.stringify(viewingDetalle, null, 2)}
-                    </pre>
-                </div>
+                {viewingDetalle && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => {
+                                    navigator.clipboard.writeText(JSON.stringify(viewingDetalle, null, 2));
+                                    // Opcional: podrías poner un toast aquí
+                                }}
+                                title="Copiar JSON al portapapeles"
+                            >
+                                <Copy size={16} /> Copiar JSON
+                            </Button>
+                        </div>
+
+                        {/* Cabecera */}
+                        <div className="form-section">
+                            <div className="form-section-title"><Truck size={16} /> Datos de Cabecera</div>
+                            <div style={{ 
+                                display: 'grid', 
+                                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
+                                gap: '12px',
+                                fontSize: '0.85rem',
+                                background: 'var(--surface-hover)',
+                                padding: '16px',
+                                borderRadius: 'var(--radius-md)'
+                            }}>
+                                <div><strong>Remito:</strong> {viewingDetalle.CODIGO_DOC}</div>
+                                <div><strong>Fecha Emisión:</strong> {viewingDetalle.FECHA_EMISION}</div>
+                                <div><strong>CUIT Dest:</strong> {viewingDetalle.DESTINATARIO_CUIT}</div>
+                                <div><strong>Cliente:</strong> {viewingDetalle.DESTINATARIO_RAZON_SOCIAL}</div>
+                                <div><strong>Localidad:</strong> {viewingDetalle.DESTINO_DOMICILIO_LOCALIDAD}</div>
+                                <div><strong>Importe:</strong> ${viewingDetalle.IMPORTE || viewingDetalle.importeTotal}</div>
+                                <div><strong>Patente:</strong> {viewingDetalle.patente}</div>
+                                <div><strong>Transportista:</strong> {viewingDetalle.razonSocialTransportista}</div>
+                            </div>
+                        </div>
+
+                        {/* Productos */}
+                        <div className="form-section">
+                            <div className="form-section-title"><Package size={16} /> Productos ({viewingDetalle.productos?.length})</div>
+                            <div className="results-table-container-sm" style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                                <table className="results-table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Código</th>
+                                            <th>Descripción</th>
+                                            <th style={{ textAlign: 'right' }}>Cantidad</th>
+                                            <th>Unidad</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {(viewingDetalle.productos || []).map((p, i) => (
+                                            <tr key={i}>
+                                                <td>{p.codigoArba || p.codigoPropio}</td>
+                                                <td style={{ fontSize: '0.75rem' }}>{p.descripcion}</td>
+                                                <td style={{ textAlign: 'right' }}>{p.cantidad}</td>
+                                                <td>{p.unidadDescripcion || 'Un.'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </Modal>
         </div>
     );
