@@ -66,7 +66,7 @@ class ArbaService {
         
         const contenido = lineas.join('\r\n');
         
-        if (this.saveLocal || true) {
+        if (this.saveLocal) {
             if (!fs.existsSync(this.localPath)) {
                 fs.mkdirSync(this.localPath, { recursive: true });
             }
