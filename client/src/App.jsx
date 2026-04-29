@@ -21,7 +21,10 @@ const AuthGate = ({ children }) => {
     const { isAuthenticated, loading, login, loginGoogle } = useAuth();
     const { theme, toggleTheme } = useTheme();
 
-    const handleGoogleLogin = useGoogleLogin({
+    const googleId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+    // Solo inicializamos el hook si hay un ID válido
+    const handleGoogleLogin = googleId ? useGoogleLogin({
         onSuccess: async (tokenResponse) => {
             try {
                 const res = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -33,7 +36,7 @@ const AuthGate = ({ children }) => {
             }
         },
         onError: (error) => console.log('Login Failed:', error)
-    });
+    }) : null;
 
     if (loading) {
         return (
@@ -95,7 +98,7 @@ const AuthGate = ({ children }) => {
                         Inicia sesión con Microsoft
                     </Button>
 
-                    {import.meta.env.VITE_ENABLE_GOOGLE_LOGIN !== 'false' && (
+                    {googleId && import.meta.env.VITE_ENABLE_GOOGLE_LOGIN !== 'false' && (
                         <>
                             <div style={{
                                 display: 'flex',
@@ -114,7 +117,7 @@ const AuthGate = ({ children }) => {
 
                             <Button
                                 className="btn-google"
-                                onClick={() => handleGoogleLogin()}
+                                onClick={() => handleGoogleLogin && handleGoogleLogin()}
                             >
                                 <img
                                     src={googleLogo}
@@ -134,25 +137,35 @@ const AuthGate = ({ children }) => {
 };
 
 function App() {
-    return (
-        <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
-            <AuthProvider>
-                <ThemeProvider>
-                    <Router>
-                        <AuthGate>
-                            <Layout>
-                                <Routes>
-                                    <Route path="/" element={<Dashboard />} />
-                                    <Route path="/regeneracion-cot" element={<RegeneracionCOT />} />
-                                    <Route path="/configuracion" element={<Settings />} />
-                                </Routes>
-                            </Layout>
-                        </AuthGate>
-                    </Router>
-                </ThemeProvider>
-            </AuthProvider>
-        </GoogleOAuthProvider>
+    const googleId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    
+    const content = (
+        <AuthProvider>
+            <ThemeProvider>
+                <Router>
+                    <AuthGate>
+                        <Layout>
+                            <Routes>
+                                <Route path="/" element={<Dashboard />} />
+                                <Route path="/regeneracion-cot" element={<RegeneracionCOT />} />
+                                <Route path="/configuracion" element={<Settings />} />
+                            </Routes>
+                        </Layout>
+                    </AuthGate>
+                </Router>
+            </ThemeProvider>
+        </AuthProvider>
     );
+
+    if (googleId) {
+        return (
+            <GoogleOAuthProvider clientId={googleId}>
+                {content}
+            </GoogleOAuthProvider>
+        );
+    }
+
+    return content;
 }
 
 export default App;
