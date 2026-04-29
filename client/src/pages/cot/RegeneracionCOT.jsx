@@ -40,7 +40,7 @@ const RegeneracionCOT = () => {
         patente: '',
         patenteAcoplado: '',
         fechaPartida: new Date().toISOString().split('T')[0],
-        horaPartida: '',
+        horaPartida: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }).replace(':', ''),
     });
 
     const [processingBatch, setProcessingBatch] = useState(false);
@@ -220,9 +220,15 @@ const RegeneracionCOT = () => {
             }));
 
             // 3. Unir con los datos del formulario (patentes, transportista)
+            // Aseguramos que los datos del formulario MANDAN sobre los de la base de datos
             const payload = {
                 ...primerFila,
-                ...cotForm,
+                cuitTransportista: String(cotForm.cuitTransportista || '').replace(/-/g, '').trim(),
+                razonSocialTransportista: cotForm.razonSocialTransportista,
+                patente: cotForm.patente,
+                patenteAcoplado: cotForm.patenteAcoplado,
+                fechaPartida: cotForm.fechaPartida,
+                horaPartida: cotForm.horaPartida,
                 productos: productosMapeados
             };
 
@@ -622,6 +628,26 @@ const RegeneracionCOT = () => {
                                             placeholder="GHI789"
                                             value={cotForm.patenteAcoplado}
                                             onChange={(e) => setCotForm({ ...cotForm, patenteAcoplado: e.target.value.toUpperCase() })}
+                                        />
+                                    </div>
+
+                                    {/* Fila 3: Fecha y Hora de Partida */}
+                                    <div className="form-grid" style={{ marginTop: '1rem' }}>
+                                        <Input
+                                            type="date"
+                                            label="Fecha de Partida *"
+                                            value={cotForm.fechaPartida}
+                                            onChange={(e) => setCotForm({ ...cotForm, fechaPartida: e.target.value })}
+                                        />
+                                        <Input
+                                            type="text"
+                                            label="Hora de Partida (HHmm) *"
+                                            placeholder="Ej: 0830"
+                                            value={cotForm.horaPartida}
+                                            onChange={(e) => {
+                                                const val = e.target.value.replace(/\D/g, '').substring(0, 4);
+                                                setCotForm({ ...cotForm, horaPartida: val });
+                                            }}
                                         />
                                     </div>
 
