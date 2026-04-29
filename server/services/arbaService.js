@@ -54,9 +54,11 @@ class ArbaService {
         
         const remitos = Array.isArray(datos) ? datos : [datos];
         for (const remito of remitos) {
+            console.log(`[ARBA] Procesando Remito: ${remito.CODIGO_DOC || remito.id}. Importe: ${remito.IMPORTE || remito.importeTotal}`);
             lineas.push(this._generarRemito(remito));
             if (remito.productos) {
                 for (const prod of remito.productos) {
+                    console.log(`[ARBA]   -> Producto: ${prod.codigoArba || prod.CODIGO_UNICO_PRODUCTO}. Cantidad: ${prod.cantidad || prod.CANTIDAD}`);
                     lineas.push(this._generarProducto(prod));
                 }
             }
@@ -135,14 +137,14 @@ class ArbaService {
             remito.ORIGEN_DOMICILIO_LOCALIDAD || remito.origenLocalidad || '',  // 34: ORIGEN_DOMICILIO_LOCALIDAD
             remito.ORIGEN_DOMICILIO_PROVINCIA || 'B',                           // 35: ORIGEN_DOMICILIO_PROVINCIA
             remito.cuitTransportista || remito.TRANSPORTISTA_CUIT || '',        // 36: TRANSPORTISTA_CUIT
-            'U',                                                                // 37: TIPO_RECORRIDO
-            ' ',                                                                // 38: RECORRIDO_LOCALIDAD
-            ' ',                                                                // 39: RECORRIDO_CALLE
-            ' ',                                                                // 40: RECORRIDO_RUTA
-            remito.patenteVehiculo || remito.patente || '',                     // 41: PATENTE_VEHICULO
-            remito.patenteAcoplado || '',                                       // 42: PATENTE_ACOPLADO
-            remito.productoNoTerminado || '0',                                  // 43: PRODUCTO_NO_TERM_DEV
-            this._toCents(remito.importeTotal || 0)                             // 44: IMPORTE
+            remito.TIPO_RECORRIDO || 'U',                                       // 37: TIPO_RECORRIDO
+            remito.RECORRIDO_LOCALIDAD || ' ',                                  // 38: RECORRIDO_LOCALIDAD
+            remito.RECORRIDO_CALLE || ' ',                                      // 39: RECORRIDO_CALLE
+            remito.RECORRIDO_RUTA || ' ',                                       // 40: RECORRIDO_RUTA
+            remito.patenteVehiculo || remito.patente || remito.PATENTE_VEHICULO || '', // 41: PATENTE_VEHICULO
+            remito.patenteAcoplado || remito.PATENTE_ACOPLADO || '',            // 42: PATENTE_ACOPLADO
+            remito.PRODUCTO_NO_TERM_DEV || remito.productoNoTerminado || '0',   // 43: PRODUCTO_NO_TERM_DEV
+            this._toCents(remito.IMPORTE || remito.importeTotal || 0)           // 44: IMPORTE
         ].map(val => String(val || '').trim());
 
         return fields.join('|');
