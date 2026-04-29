@@ -53,6 +53,10 @@ const RegeneracionCOT = () => {
     const [viewingDetalle, setViewingDetalle] = useState(null);
     const [retryingIndex, setRetryingIndex] = useState(null);
 
+    // Transportistas
+    const [transportistas, setTransportistas] = useState([]);
+    const [loadingTransportistas, setLoadingTransportistas] = useState(false);
+
     // --- Effects ---
     useEffect(() => {
         cargarHojasRuta();
@@ -157,10 +161,26 @@ const RegeneracionCOT = () => {
             }
 
             setSelectedHoja(hoja);
+            
+            // Cargar transportistas si no están cargados
+            if (transportistas.length === 0) {
+                setLoadingTransportistas(true);
+                try {
+                    const resT = await FinnegansService.getTransportistas();
+                    setTransportistas(resT.data || []);
+                } catch (err) {
+                    console.error('Error cargando transportistas:', err);
+                } finally {
+                    setLoadingTransportistas(false);
+                }
+            }
+
             setCotForm(prev => ({
                 ...prev,
-                cuitTransportista: hoja?.TRANSPORTISTAID || '',
-                razonSocialTransportista: hoja?.TRANSPORTISTA || '',
+                cuitTransportista: '',
+                razonSocialTransportista: '',
+                patente: '',
+                patenteAcoplado: '',
             }));
             setCurrentStep(1);
         } catch (err) {
@@ -550,31 +570,63 @@ const RegeneracionCOT = () => {
                                     <div className="form-section-title">
                                         <Truck size={16} /> Vehículo y Transportista
                                     </div>
+                                    
+                                    {/* Fila 1: Transportista Ancho Completo */}
+                                    <div className="dy-form-group" style={{ marginBottom: '1.5rem' }}>
+                                        <label className="dy-label">Transportista *</label>
+                                        <select 
+                                            className="dy-select"
+                                            style={{ width: '100%' }}
+                                            value={transportistas.find(t => t.razonSocial === cotForm.razonSocialTransportista)?.codigo || ''}
+                                            disabled={loadingTransportistas}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                if (!val) {
+                                                    setCotForm({
+                                                        ...cotForm,
+                                                        razonSocialTransportista: '',
+                                                        cuitTransportista: ''
+                                                    });
+                                                    return;
+                                                }
+                                                const t = transportistas.find(item => item.codigo === val);
+                                                if (t) {
+                                                    setCotForm({
+                                                        ...cotForm,
+                                                        razonSocialTransportista: t.razonSocial,
+                                                        cuitTransportista: t.cuit
+                                                    });
+                                                }
+                                            }}
+                                        >
+                                            <option value="">-- Seleccionar Transportista --</option>
+                                            {transportistas.map(t => (
+                                                <option key={t.codigo} value={t.codigo}>
+                                                    {t.nombre.length > 30 ? `${t.nombre.substring(0, 30)}...` : t.nombre} ({t.cuit})
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {loadingTransportistas && <span style={{fontSize: '0.7rem', color: 'var(--dy-red)'}}>Cargando transportistas...</span>}
+                                    </div>
+
+                                    {/* Fila 2: Patentes */}
                                     <div className="form-grid">
                                         <Input
-                                            label="Transportista *"
-                                            placeholder="Buscar transportista..."
-                                            value={cotForm.razonSocialTransportista}
-                                            onChange={(e) => setCotForm({ ...cotForm, razonSocialTransportista: e.target.value })}
-                                        />
-                                        <Input
-                                            label="CUIT"
-                                            value={cotForm.cuitTransportista}
-                                            onChange={(e) => setCotForm({ ...cotForm, cuitTransportista: e.target.value })}
-                                        />
-                                        <Input
                                             label="Patente Camión *"
-                                            placeholder="Ej: AB123CD"
+                                            placeholder="ABC123"
                                             value={cotForm.patente}
-                                            onChange={(e) => setCotForm({ ...cotForm, patente: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}
+                                            onChange={(e) => setCotForm({ ...cotForm, patente: e.target.value.toUpperCase() })}
                                         />
                                         <Input
                                             label="Patente Acoplado"
-                                            placeholder="Ej: XY987WZ (Opcional)"
+                                            placeholder="GHI789"
                                             value={cotForm.patenteAcoplado}
-                                            onChange={(e) => setCotForm({ ...cotForm, patenteAcoplado: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}
+                                            onChange={(e) => setCotForm({ ...cotForm, patenteAcoplado: e.target.value.toUpperCase() })}
                                         />
                                     </div>
+
+                                    {/* Campo CUIT Oculto (pero necesario para el paso 3) */}
+                                    <input type="hidden" value={cotForm.cuitTransportista} />
                                 </div>
                             </div>
 

@@ -272,6 +272,57 @@ class FinnegansService {
         };
         return this.executeReport(report, params);
     }
+
+    /**
+     * Obtiene la lista de transportistas habilitados.
+     * Proceso:
+     * 1. Listar proveedores activos.
+     * 2. Obtener detalle de cada uno para verificar 'EsTransportista'.
+     * 3. Limpiar CUIT (quitar guiones).
+     */
+    async getTransportistas() {
+        try {
+            console.log('[Finnegans] Iniciando búsqueda simplificada de proveedores...');
+            
+            // 1. Obtener lista completa de proveedores
+            const proveedores = await this.query('proveedor/list');
+            if (!Array.isArray(proveedores)) return [];
+
+            console.log(`[Finnegans] Se obtuvieron ${proveedores.length} proveedores en total.`);
+
+            // 2. Filtrar activos y mapear campos
+            const transportistas = proveedores
+                .filter(p => p.activo === true)
+                .map(p => ({
+                    codigo: p.codigo,
+                    nombre: p.nombre,
+                    razonSocial: p.nombre,
+                    email: '',
+                    cuit: String(p.codigo || '').replace(/-/g, '').trim()
+                }))
+                .sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+            // 3. Añadir Transporte Propio al inicio
+            transportistas.unshift({
+                codigo: 'PROPIO',
+                nombre: 'TRANSPORTE PROPIO',
+                razonSocial: 'TRANSPORTE PROPIO',
+                email: '',
+                cuit: (process.env.ARBA_CUIT_EMPRESA || '').replace(/-/g, '').trim()
+            });
+
+            console.log('=========================================');
+            console.log(`[Finnegans] LISTA DE PROVEEDORES GENERADA (${transportistas.length}):`);
+            console.log(JSON.stringify(transportistas.slice(0, 10), null, 2));
+            console.log('... (truncado para la terminal) ...');
+            console.log('=========================================');
+
+            return transportistas;
+        } catch (error) {
+            console.error('[Finnegans] Error en getTransportistas:', error.message);
+            throw error;
+        }
+    }
 }
 
 module.exports = FinnegansService;

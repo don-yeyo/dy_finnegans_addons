@@ -17,6 +17,8 @@ export const FinnegansService = {
         api.get(`/finnegans/hojas-ruta/${hojaRutaId}/remitos`, { params: { fecha } }),
     getDetalleRemitoCOT: (remitoId) =>
         api.get(`/finnegans/remitos/${remitoId}/detalle-cot`),
+    getTransportistas: () =>
+        api.get('/finnegans/transportistas'),
 };
 
 export const COTService = {

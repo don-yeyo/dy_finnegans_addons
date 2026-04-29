@@ -118,11 +118,26 @@ const getDetalleRemitoCOT = async (req, res) => {
     }
 };
 
+/**
+ * Obtener lista de transportistas habilitados.
+ * GET /api/finnegans/transportistas
+ */
+const getTransportistas = async (req, res) => {
+    try {
+        const transportistas = await finnegans.getTransportistas();
+        res.json(transportistas);
+    } catch (error) {
+        console.error('[Finnegans] Error obteniendo transportistas:', error.message);
+        res.status(500).json({ error: 'Error obteniendo lista de transportistas.' });
+    }
+};
+
 module.exports = {
     buscarEnvios,
     getHojasRuta,
     getDetalleHojaRuta,
     buscarHojasRutaRango,
     getRemitosHojaRuta,
-    getDetalleRemitoCOT
+    getDetalleRemitoCOT,
+    getTransportistas
 };

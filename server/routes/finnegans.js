@@ -6,8 +6,12 @@ const {
     getDetalleHojaRuta,
     buscarHojasRutaRango,
     getRemitosHojaRuta,
-    getDetalleRemitoCOT
+    getDetalleRemitoCOT,
+    getTransportistas
 } = require('../controllers/finnegansController');
+
+// Lista de transportistas habilitados
+router.get('/transportistas', getTransportistas);
 
 // Bucar hojas por rango de días
 router.get('/hojas-ruta/rango', buscarHojasRutaRango);
