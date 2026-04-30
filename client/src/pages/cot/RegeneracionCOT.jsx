@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, Input } from '../../components/FormElements';
 import { Button } from '../../components/Button';
 import Modal from '../../components/Modal';
@@ -56,6 +56,20 @@ const RegeneracionCOT = () => {
     // Transportistas
     const [transportistas, setTransportistas] = useState([]);
     const [loadingTransportistas, setLoadingTransportistas] = useState(false);
+    const [transportistaSearch, setTransportistaSearch] = useState('');
+    const [showTransportistas, setShowTransportistas] = useState(false);
+    const transportistaRef = useRef(null);
+
+    // Clic afuera para cerrar dropdown
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (transportistaRef.current && !transportistaRef.current.contains(event.target)) {
+                setShowTransportistas(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // --- Effects ---
     useEffect(() => {
@@ -182,6 +196,7 @@ const RegeneracionCOT = () => {
                 patente: '',
                 patenteAcoplado: '',
             }));
+            setTransportistaSearch('');
             setCurrentStep(1);
         } catch (err) {
             console.error('Error al preparar configuración:', err);
@@ -294,11 +309,11 @@ const RegeneracionCOT = () => {
     };
 
     const handlePreConfirm = () => {
-        if (!cotForm.razonSocialTransportista || !cotForm.patente) {
+        if (!cotForm.razonSocialTransportista || !cotForm.patente || !cotForm.cuitTransportista) {
             setAlertModal({
                 show: true,
                 title: 'Datos Faltantes',
-                message: 'Por favor, complete los campos obligatorios (Transportista y Patente) antes de continuar.',
+                message: 'Por favor, complete los campos obligatorios (Transportista, CUIT y Patente) antes de continuar.',
                 type: 'warning'
             });
             return;
@@ -577,42 +592,89 @@ const RegeneracionCOT = () => {
                                         <Truck size={16} /> Vehículo y Transportista
                                     </div>
                                     
-                                    {/* Fila 1: Transportista Ancho Completo */}
-                                    <div className="dy-form-group" style={{ marginBottom: '1.5rem' }}>
-                                        <label className="dy-label">Transportista *</label>
-                                        <select 
-                                            className="dy-select"
-                                            style={{ width: '100%' }}
-                                            value={transportistas.find(t => t.razonSocial === cotForm.razonSocialTransportista)?.codigo || ''}
-                                            disabled={loadingTransportistas}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                if (!val) {
+                                    {/* Fila 1: Transportista y CUIT */}
+                                    <div className="form-grid" style={{ marginBottom: '1.5rem' }}>
+                                        <div className="dy-form-group" style={{ position: 'relative' }} ref={transportistaRef}>
+                                            <label className="dy-label">Transportista *</label>
+                                            <input
+                                                type="text"
+                                                className="dy-input"
+                                                placeholder="Buscar transportista..."
+                                                value={transportistaSearch}
+                                                onChange={(e) => {
+                                                    setTransportistaSearch(e.target.value);
+                                                    setShowTransportistas(true);
+                                                    setCotForm(prev => ({ ...prev, razonSocialTransportista: 'PERSONALIZADO' }));
+                                                }}
+                                                onFocus={() => setShowTransportistas(true)}
+                                                disabled={loadingTransportistas}
+                                                style={{ width: '100%' }}
+                                            />
+                                            {loadingTransportistas && <span style={{fontSize: '0.7rem', color: 'var(--dy-red)'}}>Cargando transportistas...</span>}
+                                            
+                                            {showTransportistas && (
+                                                <div style={{
+                                                    position: 'absolute',
+                                                    top: '100%',
+                                                    left: 0,
+                                                    right: 0,
+                                                    maxHeight: '200px',
+                                                    overflowY: 'auto',
+                                                    background: 'var(--surface)',
+                                                    border: '1px solid var(--border)',
+                                                    borderRadius: 'var(--radius)',
+                                                    zIndex: 10,
+                                                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                                                }}>
+                                                    {transportistas
+                                                        .filter(t => t.nombre.toLowerCase().includes(transportistaSearch.toLowerCase()) || (t.cuit && t.cuit.includes(transportistaSearch)))
+                                                        .map(t => (
+                                                            <div 
+                                                                key={t.codigo}
+                                                                style={{
+                                                                    padding: '8px 12px',
+                                                                    cursor: 'pointer',
+                                                                    borderBottom: '1px solid var(--border-light)'
+                                                                }}
+                                                                onClick={() => {
+                                                                    setTransportistaSearch(t.nombre);
+                                                                    setCotForm({
+                                                                        ...cotForm,
+                                                                        razonSocialTransportista: t.razonSocial,
+                                                                        cuitTransportista: t.cuit ? t.cuit.replace(/\D/g, '') : ''
+                                                                    });
+                                                                    setShowTransportistas(false);
+                                                                }}
+                                                                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-hover)'}
+                                                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                                            >
+                                                                {t.nombre.length > 30 ? `${t.nombre.substring(0, 30)}...` : t.nombre} {t.cuit ? `(${t.cuit})` : ''}
+                                                            </div>
+                                                        ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="dy-form-group">
+                                            <label className="dy-label">CUIT Transportista *</label>
+                                            <input
+                                                type="text"
+                                                className="dy-input"
+                                                placeholder="Ej: 30123456789"
+                                                value={cotForm.cuitTransportista}
+                                                onChange={(e) => {
+                                                    const cuit = e.target.value.replace(/\D/g, '');
+                                                    let t = transportistas.find(item => item.cuit && item.cuit.replace(/\D/g, '') === cuit);
                                                     setCotForm({
                                                         ...cotForm,
-                                                        razonSocialTransportista: '',
-                                                        cuitTransportista: ''
+                                                        cuitTransportista: cuit,
+                                                        razonSocialTransportista: t ? t.razonSocial : 'PERSONALIZADO'
                                                     });
-                                                    return;
-                                                }
-                                                const t = transportistas.find(item => item.codigo === val);
-                                                if (t) {
-                                                    setCotForm({
-                                                        ...cotForm,
-                                                        razonSocialTransportista: t.razonSocial,
-                                                        cuitTransportista: t.cuit
-                                                    });
-                                                }
-                                            }}
-                                        >
-                                            <option value="">-- Seleccionar Transportista --</option>
-                                            {transportistas.map(t => (
-                                                <option key={t.codigo} value={t.codigo}>
-                                                    {t.nombre.length > 30 ? `${t.nombre.substring(0, 30)}...` : t.nombre} ({t.cuit})
-                                                </option>
-                                            ))}
-                                        </select>
-                                        {loadingTransportistas && <span style={{fontSize: '0.7rem', color: 'var(--dy-red)'}}>Cargando transportistas...</span>}
+                                                    setTransportistaSearch(t ? t.nombre : 'PERSONALIZADO');
+                                                }}
+                                                style={{ width: '100%' }}
+                                            />
+                                        </div>
                                     </div>
 
                                     {/* Fila 2: Patentes */}
@@ -650,9 +712,6 @@ const RegeneracionCOT = () => {
                                             }}
                                         />
                                     </div>
-
-                                    {/* Campo CUIT Oculto (pero necesario para el paso 3) */}
-                                    <input type="hidden" value={cotForm.cuitTransportista} />
                                 </div>
                             </div>
 
