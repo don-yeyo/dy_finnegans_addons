@@ -322,6 +322,64 @@ input:focus, select:focus {
   .desktop-only { display: none !important; }
   .header { padding: 0 12px; }
   .header-left { gap: 8px; }
+
+  /* Mobile layout adjustments */
+  .content { padding: 12px; }
+  
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .addon-card {
+    flex-direction: column;
+    text-align: center;
+    padding: 24px 16px;
+  }
+  
+  .addon-card-icon {
+    margin: 0 auto;
+  }
+
+  /* Make tables responsive */
+  .results-table, .results-table-sm {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Stepper mobile layout */
+  .stepper {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  
+  .stepper-connector {
+    width: 2px;
+    height: 20px;
+    margin: 0 0 0 21px; /* Align with center of 44px circle */
+  }
+
+  .login-container {
+    padding: 16px;
+  }
+
+  /* Adjust accordion header */
+  .dy-accordion-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .dy-accordion-header > div:last-child {
+    margin-top: 16px;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  /* Typography adjustments */
+  h1 { font-size: 1.8rem !important; }
 }
 
 /* Spinner */
@@ -376,6 +434,14 @@ input:focus, select:focus {
     text-align: center;
     height: auto !important;
     min-height: 44px;
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .dy-accordion-subtitle {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
 }
 
