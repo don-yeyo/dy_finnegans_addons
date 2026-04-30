@@ -18,7 +18,7 @@ import googleLogo from './assets/google-logo.svg';
 import { Sun, Moon } from 'lucide-react';
 
 const AuthGate = ({ children }) => {
-    const { isAuthenticated, loading, login, loginGoogle } = useAuth();
+    const { isAuthenticated, loading, login, loginGoogle, logout, authError } = useAuth();
     const { theme, toggleTheme } = useTheme();
 
     const googleId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -85,47 +85,75 @@ const AuthGate = ({ children }) => {
                 </p>
 
                 <div className="login-options">
-                    <Button
-                        className="btn-microsoft"
-                        onClick={login}
-                        disabled={loading}
-                    >
-                        <img
-                            src={microsoftLogo}
-                            alt="Microsoft"
-                            style={{ height: '26px', width: '26px', objectFit: 'contain' }}
-                        />
-                        Inicia sesión con Microsoft
-                    </Button>
-
-                    {googleId && import.meta.env.VITE_ENABLE_GOOGLE_LOGIN !== 'false' && (
-                        <>
-                            <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '12px',
-                                width: '100%',
-                                maxWidth: '320px',
-                                margin: '8px 0',
-                                color: 'var(--text-muted)',
-                                fontSize: '0.9rem'
-                            }}>
-                                <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}></div>
-                                <span>O</span>
-                                <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}></div>
-                            </div>
-
+                    {authError ? (
+                        <div style={{
+                            padding: '16px',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            border: '1px solid var(--dy-red)',
+                            borderRadius: 'var(--radius-md)',
+                            color: 'var(--dy-red)',
+                            textAlign: 'center',
+                            marginBottom: '16px',
+                            fontSize: '0.9rem'
+                        }}>
+                            <p style={{ margin: '0 0 12px 0' }}>{authError}</p>
                             <Button
-                                className="btn-google"
-                                onClick={() => handleGoogleLogin && handleGoogleLogin()}
+                                variant="outline"
+                                onClick={() => {
+                                    // Limpiamos todo para que pueda intentar con otra cuenta
+                                    logout();
+                                }}
+                                style={{ width: '100%' }}
+                            >
+                                Cambiar de Cuenta
+                            </Button>
+                        </div>
+                    ) : (
+                        <>
+                            <Button
+                                className="btn-microsoft"
+                                onClick={login}
+                                disabled={loading}
                             >
                                 <img
-                                    src={googleLogo}
-                                    alt="Google"
+                                    src={microsoftLogo}
+                                    alt="Microsoft"
                                     style={{ height: '26px', width: '26px', objectFit: 'contain' }}
                                 />
-                                Inicia sesión con Google
+                                Inicia sesión con Microsoft
                             </Button>
+
+                            {googleId && import.meta.env.VITE_ENABLE_GOOGLE_LOGIN !== 'false' && (
+                                <>
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '12px',
+                                        width: '100%',
+                                        maxWidth: '320px',
+                                        margin: '8px 0',
+                                        color: 'var(--text-muted)',
+                                        fontSize: '0.9rem'
+                                    }}>
+                                        <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}></div>
+                                        <span>O</span>
+                                        <div style={{ flex: 1, height: '1px', background: 'var(--border)' }}></div>
+                                    </div>
+
+                                    <Button
+                                        className="btn-google"
+                                        onClick={() => handleGoogleLogin && handleGoogleLogin()}
+                                        disabled={loading}
+                                    >
+                                        <img
+                                            src={googleLogo}
+                                            alt="Google"
+                                            style={{ height: '26px', width: '26px', objectFit: 'contain' }}
+                                        />
+                                        Inicia sesión con Google
+                                    </Button>
+                                </>
+                            )}
                         </>
                     )}
                 </div>

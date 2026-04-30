@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { loginRequest } from "./msal";
-
 import { InteractionStatus } from "@azure/msal-browser";
+import { SystemService } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -14,6 +14,8 @@ export const AuthProvider = ({ children }) => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [authError, setAuthError] = useState(null);
+    const [validatedEmail, setValidatedEmail] = useState(null);
 
     // Cargar usuario de Google si existe en localStorage
     useEffect(() => {
@@ -29,52 +31,85 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     useEffect(() => {
-        // BYPASS DE AUTENTICACION PARA DESARROLLO LOCAL
-        if (import.meta.env.DEV && import.meta.env.VITE_MOCK_AUTH === 'true') {
-            const mockEmail = import.meta.env.VITE_MOCK_AUTH_EMAIL;
-            const mockName = import.meta.env.VITE_MOCK_AUTH_NAME || "Usuario Mock";
+        const checkAuth = async () => {
+            // BYPASS DE AUTENTICACION PARA DESARROLLO LOCAL
+            if (import.meta.env.DEV && import.meta.env.VITE_MOCK_AUTH === 'true') {
+                const mockEmail = import.meta.env.VITE_MOCK_AUTH_EMAIL;
+                const mockName = import.meta.env.VITE_MOCK_AUTH_NAME || "Usuario Mock";
 
-            console.log(`⚠️ MODO MOCK ACTIVADO: Entrando como ${mockEmail}`);
-            setIsAuthenticated(true);
-            setUser({
-                name: mockName,
-                email: mockEmail,
-                provider: 'mock',
-                avatar: null
-            });
-            setLoading(false);
-            return;
-        }
-
-        if (isMsAuthenticated && accounts.length > 0) {
-            setIsAuthenticated(true);
-            setUser({
-                name: accounts[0].name,
-                email: accounts[0].username,
-                provider: 'microsoft',
-                avatar: null
-            });
-            setLoading(false);
-        } else if (googleUser) {
-            setIsAuthenticated(true);
-            setUser({
-                name: googleUser.name,
-                email: googleUser.email,
-                provider: 'google',
-                avatar: googleUser.picture
-            });
-            setLoading(false);
-        } else {
-            setIsAuthenticated(false);
-            setUser(null);
-            // Solo dejamos de cargar si no estamos en medio de un proceso de MSAL
-            if (inProgress === InteractionStatus.None) {
+                console.log(`⚠️ MODO MOCK ACTIVADO: Entrando como ${mockEmail}`);
+                setIsAuthenticated(true);
+                setUser({
+                    name: mockName,
+                    email: mockEmail,
+                    provider: 'mock',
+                    avatar: null
+                });
                 setLoading(false);
+                return;
             }
-        }
-    }, [isMsAuthenticated, accounts, googleUser, inProgress]);
+
+            let pendingUser = null;
+            if (isMsAuthenticated && accounts.length > 0) {
+                pendingUser = {
+                    name: accounts[0].name,
+                    email: accounts[0].username,
+                    provider: 'microsoft',
+                    avatar: null
+                };
+            } else if (googleUser) {
+                pendingUser = {
+                    name: googleUser.name,
+                    email: googleUser.email,
+                    provider: 'google',
+                    avatar: googleUser.picture
+                };
+            }
+
+            if (pendingUser) {
+                if (validatedEmail === pendingUser.email) {
+                    // Ya validado
+                    if (!isAuthenticated && inProgress === InteractionStatus.None) {
+                        setLoading(false);
+                    }
+                    return;
+                }
+
+                try {
+                    const response = await SystemService.validateEmail(pendingUser.email);
+                    if (response.data && response.data.authorized) {
+                        setIsAuthenticated(true);
+                        setUser(pendingUser);
+                        setAuthError(null);
+                    } else {
+                        setIsAuthenticated(false);
+                        setUser(null);
+                        setAuthError(`La cuenta ${pendingUser.email} no está autorizada.`);
+                    }
+                } catch (error) {
+                    console.error("Error validando email:", error);
+                    setIsAuthenticated(false);
+                    setUser(null);
+                    setAuthError("Error de conexión al validar permisos.");
+                }
+                setValidatedEmail(pendingUser.email);
+                setLoading(false);
+            } else {
+                setIsAuthenticated(false);
+                setUser(null);
+                setAuthError(null);
+                setValidatedEmail(null);
+                if (inProgress === InteractionStatus.None) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        checkAuth();
+    }, [isMsAuthenticated, accounts, googleUser, inProgress, validatedEmail, isAuthenticated]);
 
     const login = () => {
+        setAuthError(null);
         if (inProgress === InteractionStatus.None) {
             instance.loginRedirect(loginRequest).catch(e => {
                 console.error("[MSAL] Error en loginRedirect:", e);
@@ -83,12 +118,13 @@ export const AuthProvider = ({ children }) => {
     };
 
     const loginGoogle = (decoded) => {
+        setAuthError(null);
         setGoogleUser(decoded);
         localStorage.setItem('google_user', JSON.stringify(decoded));
     };
 
     const logout = () => {
-        if (user?.provider === 'microsoft') {
+        if (user?.provider === 'microsoft' || (validatedEmail && isMsAuthenticated)) {
             instance.logoutRedirect({
                 postLogoutRedirectUri: window.location.origin,
             }).catch(e => {
@@ -107,6 +143,7 @@ export const AuthProvider = ({ children }) => {
             user,
             loading: loading || inProgress !== InteractionStatus.None,
             inProgress,
+            authError,
             login,
             loginGoogle,
             logout

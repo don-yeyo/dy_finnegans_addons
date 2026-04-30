@@ -31,6 +31,8 @@ export const COTService = {
 export const SystemService = {
     getVersion: (v) =>
         api.get(`/system/version${v ? `?v=${v}` : ''}`),
+    validateEmail: (email) =>
+        api.get(`/system/validate-email`, { params: { email } }),
 };
 
 export default api;
